@@ -16,11 +16,13 @@ to generate this file without the comments in this block.
   , "console"
   , "effect"
   , "maybe"
+  , "monad-loops"
   , "partial"
   , "prelude"
   , "random"
   , "st"
   , "strings"
+  , "tuples"
   , "unordered-collections"
   ]
 , packages = ./packages.dhall
