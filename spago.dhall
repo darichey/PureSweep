@@ -1,7 +1,9 @@
 { name = "puresweep"
 , dependencies =
   [ "arrays"
+  , "console"
   , "effect"
+  , "exceptions"
   , "halogen"
   , "halogen-hooks"
   , "maybe"
@@ -10,10 +12,11 @@
   , "prelude"
   , "random"
   , "st"
-  , "strings"
   , "tuples"
   , "unordered-collections"
+  , "web-events"
   , "web-html"
+  , "web-uievents"
   ]
 , packages = ./packages.dhall
 , sources = [ "src/**/*.purs", "test/**/*.purs" ]
