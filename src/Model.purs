@@ -81,7 +81,7 @@ makeField width height mineIndices = { cells, width, height }
       -- if the column to the right is in bounds, add the three neighbors from it.
       if (index `mod` width) + 1 < width then [index + 1, index + width + 1, index - width + 1] else [],
       -- if the column to the left is in bounds, add the three neighbors from it.
-      if (index `mod` width) - 1 > 0 then [index - 1, index + width - 1, index - width - 1] else [],
+      if (index `mod` width) - 1 >= 0 then [index - 1, index + width - 1, index - width - 1] else [],
       -- unconditionally add the neighbors above and below. STArray.modify does bounds checking, and
       -- the grid doesn't wrap on the top and bottom, so it doesn't matter if these exist or not.
       [index + width, index - width]
