@@ -16,10 +16,11 @@
       devShells.x86_64-linux.default = pkgs.mkShell
         {
           buildInputs = [
-            easy-ps.purs-0_15_2
+            easy-ps.purs
             easy-ps.spago
             easy-ps.purty
-            pkgs.nodejs-14_x
+            pkgs.nodejs
+            pkgs.esbuild
           ];
         };
     };

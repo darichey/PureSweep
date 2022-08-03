@@ -1,5 +1,8 @@
 module Model
-  ( Field
+  ( Field(..)
+  , Cell(..)
+  , UnderlyingCellState
+  , PlayerState
   , debugField
   , makeField
   , makeRandomField
