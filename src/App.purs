@@ -11,7 +11,7 @@ import Halogen.HTML as HH
 import Halogen.HTML.Events as HE
 import Halogen.HTML.Properties as HP
 import Halogen.Hooks as Hooks
-import Model (Field, PlayerState(..), RevealResult(..), makeRandomField, revealAt, toggleFlagAt)
+import Model (Field, PlayerState(..), RevealResult(..), chordAt, makeRandomField, revealAt, toggleFlagAt)
 import OnContextMenu (onContextMenu)
 import Type.Proxy (Proxy(..))
 import Web.Event.Event (preventDefault)
@@ -80,7 +80,11 @@ fieldComponent =
                             0 -> case revealAt i field of
                               Ok newField -> Hooks.raise outputToken newField
                               _ -> pure unit
-                            -- 1 -> ?foo -- TODO: middle click
+                            1 -> case chordAt i field of
+                              Ok newField -> do
+                                liftEffect $ Console.log "middle click"
+                                Hooks.raise outputToken newField
+                              _ -> pure unit
                             2 -> case toggleFlagAt i field of
                               Just newField -> Hooks.raise outputToken newField
                               _ -> pure unit

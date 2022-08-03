@@ -1,10 +1,13 @@
 module Model
   ( Cell
+  , CellIndex
   , Field
+  , Height
   , PlayerState(..)
   , RevealResult(..)
   , UnderlyingCellState(..)
-  , isOpen
+  , Width
+  , chordAt
   , makeField
   , makeRandomField
   , revealAt
@@ -15,14 +18,20 @@ module Model
 import Prelude
 
 import Control.Monad.ST as ST
-import Data.Array (concat, modifyAt, replicate, (!!), (..))
+import Data.Array (catMaybes, concat, filter, length, modifyAt, replicate, toUnfoldable, (!!), (..))
+import Data.Array.NonEmpty (foldr1)
 import Data.Array.ST as STArray
 import Data.HashSet (HashSet)
 import Data.HashSet as HashSet
+import Data.List (List(..), (:))
 import Data.Maybe (Maybe(..), fromJust)
 import Effect (Effect)
 import Partial.Unsafe (unsafePartial)
 import Sample (sample)
+
+type Width = Int
+type Height = Int
+type CellIndex = Int
 
 data UnderlyingCellState
   = Mine
@@ -42,18 +51,26 @@ type Cell = { underlying :: UnderlyingCellState, player :: PlayerState }
 makeOpen :: Cell -> Cell
 makeOpen cell = cell { player = Open }
 
-isOpen :: Cell -> Boolean
-isOpen { player: Open } = true
-isOpen _ = false
+isClosed :: Cell -> Boolean
+isClosed { player: Closed } = true
+isClosed _ = false
+
+isFlag :: Cell -> Boolean
+isFlag { player: Flag } = true
+isFlag _ = false
+
+incNearby :: Cell -> Cell
+incNearby cell@{ underlying: (Safe n) } = cell { underlying = (Safe (n + 1)) }
+incNearby x = x
 
 toggleFlag :: Cell -> Cell
 toggleFlag cell@{ player: Closed } = cell { player = Flag }
 toggleFlag cell@{ player: Flag } = cell { player = Closed }
 toggleFlag cell = cell
 
-type Field = { cells :: Array Cell, width :: Int, height :: Int }
+type Field = { cells :: Array Cell, width :: Width, height :: Height }
 
-makeField :: Int -> Int -> HashSet Int -> Field
+makeField :: Width -> Height -> HashSet CellIndex -> Field
 makeField width height mineIndices = { cells, width, height }
   where
     cells = STArray.run (do
@@ -61,34 +78,36 @@ makeField width height mineIndices = { cells, width, height }
       ST.foreach (HashSet.toArray mineIndices) (\i ->        
         do
           void $ STArray.poke i { underlying: Mine, player: Closed } array
-          ST.foreach (neighbors i) (\j -> void $ STArray.modify j incNearby array)
+          ST.foreach (getNeighbors i width height) (\j -> void $ STArray.modify j incNearby array)
       )
       pure array
     )
 
-    incNearby :: Cell -> Cell
-    incNearby cell@{ underlying: (Safe n) } = cell { underlying = (Safe (n + 1)) }
-    incNearby x = x
+getNeighbors :: CellIndex -> Width -> Height -> Array CellIndex
+getNeighbors index width height =
+  catMaybes [ if (columnLeft && rowAbove) then Just (index - width - 1) else Nothing
+            , if (rowAbove) then Just (index - width) else Nothing
+            , if (columnRight && rowAbove) then Just (index - width + 1) else Nothing
+            , if (columnLeft) then Just (index - 1) else Nothing
+            , if (columnRight) then Just (index + 1) else Nothing
+            , if (columnLeft && rowBelow) then Just (index + width - 1) else Nothing
+            , if (rowBelow) then Just (index + width) else Nothing
+            , if (columnRight && rowBelow) then Just (index + width + 1) else Nothing
+            ]
+  where
+    columnLeft = (index `mod` width) - 1 >= 0
+    columnRight = (index `mod` width) + 1 < width
+    rowAbove = index - width >= 0
+    rowBelow = (index + width) `div` width < height
 
-    neighbors :: Int -> Array Int
-    neighbors index = concat [
-      -- if the column to the right is in bounds, add the three neighbors from it.
-      if (index `mod` width) + 1 < width then [index + 1, index + width + 1, index - width + 1] else [],
-      -- if the column to the left is in bounds, add the three neighbors from it.
-      if (index `mod` width) - 1 >= 0 then [index - 1, index + width - 1, index - width - 1] else [],
-      -- unconditionally add the neighbors above and below. STArray.modify does bounds checking, and
-      -- the grid doesn't wrap on the top and bottom, so it doesn't matter if these exist or not.
-      [index + width, index - width]
-    ]
-
-makeRandomField :: Int -> Int -> Int -> Effect Field
+makeRandomField :: Width -> Height -> Int -> Effect Field
 makeRandomField width height numMines = do
   mineIndices <- sample (0 .. (width * height - 1)) numMines
   pure $ makeField width height mineIndices
 
 data RevealResult = Ok Field | Explode
 
-revealAt :: Int -> Field -> RevealResult
+revealAt :: CellIndex -> Field -> RevealResult
 revealAt i field = case field.cells !! i of
   -- if it was out of bounds somehow, already open, or a flag, just no-op
   Nothing -> Ok field
@@ -99,5 +118,34 @@ revealAt i field = case field.cells !! i of
   -- otherwise... oops
   Just { underlying: Mine } -> Explode
 
-toggleFlagAt :: Int -> Field -> Maybe Field
+revealAll :: List CellIndex -> Field -> RevealResult
+revealAll Nil field = Ok field
+revealAll (i:is) field = case revealAt i field of
+  Ok newField -> revealAll is newField
+  Explode -> Explode
+
+toggleFlagAt :: CellIndex -> Field -> Maybe Field
 toggleFlagAt i field = field { cells = _ } <$> modifyAt i toggleFlag field.cells
+
+chordAt :: CellIndex -> Field -> RevealResult
+chordAt i field = case field.cells !! i of
+  -- if it was out of bounds somehow, closed, or a flag, just no-op
+  Nothing -> Ok field
+  Just { player: Flag } -> Ok field
+  Just { player: Closed } -> Ok field
+
+  -- if it's safe, try to chord there
+  Just { player: Open, underlying: Safe nearby } ->
+    let
+      neighbors = getNeighbors i field.width field.height
+      numNearbyFlags = length $ filter (\j -> isFlag $ unsafePartial $ fromJust $ field.cells !! j) neighbors
+    in
+      if numNearbyFlags == nearby then
+        -- do the chord by revealing each closed neighbor
+        revealAll (toUnfoldable $ filter (\j -> isClosed $ unsafePartial $ fromJust $ field.cells !! j) neighbors) field
+      else
+        -- if the number of nearby flags is not equal to the number of nearby mines, do nothing
+        Ok field
+
+  -- this should be impossible. TODO: is our model off?
+  Just { player: Open, underlying: Mine } -> Ok field
