@@ -5,7 +5,7 @@
         "build:css": "npx tailwindcss -i ./web/style.css -o ./dist/output.css",
         "build:esbuild": "esbuild --bundle web/index.js",
         "bundle": "npm run build:ps && npm run build:css && npm run build:esbuild -- --minify --outfile=dist/main.js",
-        "serve": "cp web/index.html dist/index.html && npm run build:esbuild -- --servedir=dist"
+        "serve": "cp web/index.html dist/index.html && cp -r -T web/img dist/img && npm run build:esbuild -- --servedir=dist"
     },
     "devDependencies": {
         "tailwindcss": "^3.1.7"
