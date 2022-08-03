@@ -64,9 +64,9 @@ makeField width height mineIndices = { cells, width, height }
   where
     cells = STArray.run (do
       array <- STArray.unsafeThaw $ replicate (width * height) { underlying: Safe 0, player: Closed }
-      _ <- ST.foreach (HashSet.toArray mineIndices) (\i ->        
+      ST.foreach (HashSet.toArray mineIndices) (\i ->        
         do
-          _ <- STArray.poke i { underlying: Mine, player: Closed } array
+          void $ STArray.poke i { underlying: Mine, player: Closed } array
           ST.foreach (neighbors i) (\j -> void $ STArray.modify j incNearby array)
       )
       pure array
