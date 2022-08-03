@@ -4,7 +4,6 @@ module Model
   , PlayerState(..)
   , RevealResult(..)
   , UnderlyingCellState(..)
-  , debugField
   , isOpen
   , makeField
   , makeRandomField
@@ -21,11 +20,9 @@ import Data.Array.ST as STArray
 import Data.HashSet (HashSet)
 import Data.HashSet as HashSet
 import Data.Maybe (Maybe(..), fromJust)
-import Data.String (joinWith)
 import Effect (Effect)
 import Partial.Unsafe (unsafePartial)
 import Sample (sample)
-import Split (chunksOf)
 
 data UnderlyingCellState
   = Mine
@@ -55,9 +52,6 @@ toggleFlag cell@{ player: Flag } = cell { player = Closed }
 toggleFlag cell = cell
 
 type Field = { cells :: Array Cell, width :: Int, height :: Int }
-
-debugField :: Field -> String
-debugField field = joinWith "\n" (map (\row -> joinWith "" row) (chunksOf field.width (map (\cell -> show cell.underlying) (field.cells))))
 
 makeField :: Int -> Int -> HashSet Int -> Field
 makeField width height mineIndices = { cells, width, height }

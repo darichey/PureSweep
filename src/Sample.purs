@@ -1,7 +1,6 @@
 module Sample (sample) where
 
 import Prelude
-
 import Control.Monad.Rec.Loops (unfoldrM, untilJust)
 import Data.Array (length, (!!))
 import Data.HashSet (HashSet)

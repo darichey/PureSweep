@@ -1,4 +1,7 @@
-module OnContextMenu where
+module OnContextMenu
+  ( contextmenu
+  , onContextMenu
+  ) where
 
 import Halogen.HTML.Events (handler)
 import Halogen.HTML.Properties (IProp)
