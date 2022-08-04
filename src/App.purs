@@ -1,11 +1,14 @@
 module App (appComponent) where
 
 import Prelude
+
+import Control.Monad.ST.Class (liftST)
+import Control.Monad.ST.Global (Global)
 import Data.Array (mapWithIndex)
+import Data.Array.ST as STArray
 import Data.Maybe (Maybe(..), fromMaybe)
 import Data.Tuple.Nested ((/\))
 import Effect.Class (class MonadEffect, liftEffect)
-import Effect.Console as Console
 import Halogen as H
 import Halogen.HTML as HH
 import Halogen.HTML.Events as HE
@@ -59,9 +62,16 @@ appComponent =
               Just field -> HH.div_ [ HH.slot _field 3 fieldComponent { field, width, height } handleFieldUpdate ]
           ]
 
-fieldComponent :: forall query m. MonadEffect m => H.Component query { field :: Field, width :: Int, height :: Int } Field m
+fieldComponent :: forall query m. MonadEffect m => H.Component query { field :: (Field Global), width :: Int, height :: Int } (Field Global) m
 fieldComponent =
   Hooks.component \{ outputToken } { field, width, height } -> Hooks.do
+    cells /\ cellsId <- Hooks.useState []
+
+    Hooks.captures {} Hooks.useTickEffect do
+      newCells <- liftEffect $ liftST $ STArray.unsafeFreeze field.cells
+      Hooks.put cellsId newCells
+      pure Nothing
+
     Hooks.pure
       $ HH.div_
           [ HH.div
@@ -76,19 +86,25 @@ fieldComponent =
                         [ twclass "flex text-center justify-center content-center select-none"
                         , HP.draggable false
                         , onContextMenu \event -> liftEffect $ preventDefault event
-                        , HE.onMouseDown \event -> case button event of
-                            0 -> case revealAt i field of
-                              Ok newField -> Hooks.raise outputToken newField
+                        , HE.onMouseDown \event ->
+                            case button event of
+                              0 -> do
+                                result <- liftEffect $ liftST $ revealAt i field
+                                case result of
+                                  Ok -> Hooks.raise outputToken field
+                                  _ -> pure unit
+                              1 -> do
+                                result <- liftEffect $ liftST $ chordAt i field
+                                case result of
+                                  Ok -> Hooks.raise outputToken field
+                                  _ -> pure unit
+                              2 -> do
+                                result <- liftEffect $ liftST $ toggleFlagAt i field
+                                if result then
+                                  Hooks.raise outputToken field
+                                else
+                                  pure unit
                               _ -> pure unit
-                            1 -> case chordAt i field of
-                              Ok newField -> do
-                                liftEffect $ Console.log "middle click"
-                                Hooks.raise outputToken newField
-                              _ -> pure unit
-                            2 -> case toggleFlagAt i field of
-                              Just newField -> Hooks.raise outputToken newField
-                              _ -> pure unit
-                            _ -> pure unit
                         ]
                         [ HH.img
                             [ twclass "select-none"
@@ -102,7 +118,7 @@ fieldComponent =
                             ]
                         ]
                   )
-                  field.cells
+                  cells
           , HH.div_
               []
           ]
