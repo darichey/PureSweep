@@ -116,20 +116,20 @@ revealAt i field = revealWithZeroProp [ i ] field
 revealWithZeroProp :: Array CellIndex -> Field -> RevealResult
 revealWithZeroProp indices field = revealAll (fromFoldable zeroPropagated) field
   where
-  zeroPropagated = go (toUnfoldable indices) HashSet.empty
+  zeroPropagated = go (toUnfoldable indices) HashSet.empty Nil
 
-  go :: List CellIndex -> HashSet CellIndex -> HashSet CellIndex
-  go Nil acc = acc
-  go (next : queue) acc =
-    if HashSet.member next acc then go queue acc
+  go :: List CellIndex -> HashSet CellIndex -> List CellIndex -> List CellIndex
+  go Nil _ acc = acc
+  go (next : stack) visited acc =
+    if HashSet.member next visited then go stack visited acc
     else
       case field.cells !! next of
-        Just { underlying: Safe 0 } -> go (prependAll (getNeighbors next field.width field.height) queue) (HashSet.insert next acc)
-        Just { underlying: Safe _ } -> go queue (HashSet.insert next acc)
-        _ -> go queue acc
+        Just { underlying: Safe 0 } -> go (pushAll (getNeighbors next field.width field.height) stack) (HashSet.insert next visited) (next : acc)
+        Just { underlying: Safe _ } -> go stack (HashSet.insert next visited) (next : acc)
+        _ -> go stack visited acc
 
-  prependAll :: Array CellIndex -> List CellIndex -> List CellIndex
-  prependAll array list = foldr (:) list array
+  pushAll :: Array CellIndex -> List CellIndex -> List CellIndex
+  pushAll array list = foldr (:) list array
 
 revealAll :: Array CellIndex -> Field -> RevealResult
 revealAll indices field =
