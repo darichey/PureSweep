@@ -12,6 +12,7 @@
   , "prelude"
   , "random"
   , "st"
+  , "transformers"
   , "tuples"
   , "unordered-collections"
   , "web-events"

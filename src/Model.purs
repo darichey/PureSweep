@@ -17,14 +17,14 @@ module Model
 
 import Prelude
 
+import Control.Monad.Maybe.Trans (MaybeT(..), lift, runMaybeT)
 import Control.Monad.ST as ST
-import Data.Array (catMaybes, concat, filter, length, modifyAt, replicate, toUnfoldable, (!!), (..))
-import Data.Array.NonEmpty (foldr1)
+import Data.Array (catMaybes, filter, length, modifyAt, replicate, toUnfoldable, (!!), (..))
 import Data.Array.ST as STArray
 import Data.HashSet (HashSet)
 import Data.HashSet as HashSet
-import Data.List (List(..), (:))
 import Data.Maybe (Maybe(..), fromJust)
+import Data.Traversable (sequence)
 import Effect (Effect)
 import Partial.Unsafe (unsafePartial)
 import Sample (sample)
@@ -108,21 +108,26 @@ makeRandomField width height numMines = do
 data RevealResult = Ok Field | Explode
 
 revealAt :: CellIndex -> Field -> RevealResult
-revealAt i field = case field.cells !! i of
-  -- if it was out of bounds somehow, already open, or a flag, just no-op
-  Nothing -> Ok field
-  Just { player: Open } -> Ok field
-  Just { player: Flag } -> Ok field
-  -- if it's safe, return the field with the cell revealed
-  Just { underlying: Safe _ } -> Ok $ field { cells = unsafePartial $ fromJust $ modifyAt i makeOpen field.cells }
-  -- otherwise... oops
-  Just { underlying: Mine } -> Explode
+revealAt i field = revealAll [i] field
 
-revealAll :: List CellIndex -> Field -> RevealResult
-revealAll Nil field = Ok field
-revealAll (i:is) field = case revealAt i field of
-  Ok newField -> revealAll is newField
-  Explode -> Explode
+revealAll :: Array CellIndex -> Field -> RevealResult
+revealAll indices field =
+  case result of
+    Nothing -> Explode
+    Just newCells -> Ok $ field { cells = newCells }
+  where          
+    result :: Maybe (Array Cell)
+    result = ST.run (runMaybeT do
+        cells <- lift $ STArray.unsafeThaw field.cells
+        _ <- sequence $ indices <#> \i -> do
+              cell <- lift $ STArray.peek i cells
+              case cell of
+                Nothing -> pure unit
+                Just { player: Open } -> pure unit
+                Just { player: Flag } -> pure unit
+                Just { underlying: Safe _ } -> lift $ void $ STArray.modify i makeOpen cells
+                Just { underlying: Mine } -> MaybeT (pure Nothing)
+        lift $ STArray.unsafeFreeze cells)
 
 toggleFlagAt :: CellIndex -> Field -> Maybe Field
 toggleFlagAt i field = field { cells = _ } <$> modifyAt i toggleFlag field.cells
