@@ -10,19 +10,19 @@ module Model
   , chordAt
   , makeField
   , makeRandomField
-  , revealAt
   , toggleFlagAt
+  , revealAt
   ) where
 
 import Prelude
 
 import Control.Monad.Maybe.Trans (MaybeT(..), lift, runMaybeT)
 import Control.Monad.ST as ST
-import Data.Array (catMaybes, filter, fromFoldable, length, modifyAt, replicate, toUnfoldable, (!!), (..), foldr)
+import Data.Array (catMaybes, filter, foldr, fromFoldable, length, modifyAt, replicate, toUnfoldable, (!!), (..))
 import Data.Array.ST as STArray
 import Data.HashSet (HashSet)
 import Data.HashSet as HashSet
-import Data.List (List(..), singleton, (:))
+import Data.List (List(..), (:))
 import Data.Maybe (Maybe(..), fromJust)
 import Data.Traversable (sequence)
 import Effect (Effect)
@@ -111,9 +111,12 @@ makeRandomField width height numMines = do
 data RevealResult = Ok Field | Explode
 
 revealAt :: CellIndex -> Field -> RevealResult
-revealAt i field = revealAll (fromFoldable zeroPropagated) field
+revealAt i field = revealWithZeroProp [ i ] field
+
+revealWithZeroProp :: Array CellIndex -> Field -> RevealResult
+revealWithZeroProp indices field = revealAll (fromFoldable zeroPropagated) field
   where
-  zeroPropagated = go (singleton i) HashSet.empty
+  zeroPropagated = go (toUnfoldable indices) HashSet.empty
 
   go :: List CellIndex -> HashSet CellIndex -> HashSet CellIndex
   go Nil acc = acc
@@ -167,7 +170,7 @@ chordAt i field = case field.cells !! i of
     in
       if numNearbyFlags == nearby then
         -- do the chord by revealing each closed neighbor
-        revealAll (toUnfoldable $ filter (\j -> isClosed $ unsafePartial $ fromJust $ field.cells !! j) neighbors) field
+        revealWithZeroProp (toUnfoldable $ filter (\j -> isClosed $ unsafePartial $ fromJust $ field.cells !! j) neighbors) field
       else
         -- if the number of nearby flags is not equal to the number of nearby mines, do nothing
         Ok field
