@@ -12,8 +12,7 @@ module Model
   , makeRandomField
   , revealAt
   , toggleFlagAt
-  )
-  where
+  ) where
 
 import Prelude
 
@@ -73,32 +72,35 @@ type Field = { cells :: Array Cell, width :: Width, height :: Height }
 makeField :: Width -> Height -> HashSet CellIndex -> Field
 makeField width height mineIndices = { cells, width, height }
   where
-    cells = STArray.run (do
-      array <- STArray.unsafeThaw $ replicate (width * height) { underlying: Safe 0, player: Closed }
-      ST.foreach (HashSet.toArray mineIndices) (\i ->        
-        do
-          void $ STArray.poke i { underlying: Mine, player: Closed } array
-          ST.foreach (getNeighbors i width height) (\j -> void $ STArray.modify j incNearby array)
-      )
-      pure array
+  cells = STArray.run
+    ( do
+        array <- STArray.unsafeThaw $ replicate (width * height) { underlying: Safe 0, player: Closed }
+        ST.foreach (HashSet.toArray mineIndices)
+          ( \i ->
+              do
+                void $ STArray.poke i { underlying: Mine, player: Closed } array
+                ST.foreach (getNeighbors i width height) (\j -> void $ STArray.modify j incNearby array)
+          )
+        pure array
     )
 
 getNeighbors :: CellIndex -> Width -> Height -> Array CellIndex
 getNeighbors index width height =
-  catMaybes [ if (columnLeft && rowAbove) then Just (index - width - 1) else Nothing
-            , if (rowAbove) then Just (index - width) else Nothing
-            , if (columnRight && rowAbove) then Just (index - width + 1) else Nothing
-            , if (columnLeft) then Just (index - 1) else Nothing
-            , if (columnRight) then Just (index + 1) else Nothing
-            , if (columnLeft && rowBelow) then Just (index + width - 1) else Nothing
-            , if (rowBelow) then Just (index + width) else Nothing
-            , if (columnRight && rowBelow) then Just (index + width + 1) else Nothing
-            ]
+  catMaybes
+    [ if (columnLeft && rowAbove) then Just (index - width - 1) else Nothing
+    , if (rowAbove) then Just (index - width) else Nothing
+    , if (columnRight && rowAbove) then Just (index - width + 1) else Nothing
+    , if (columnLeft) then Just (index - 1) else Nothing
+    , if (columnRight) then Just (index + 1) else Nothing
+    , if (columnLeft && rowBelow) then Just (index + width - 1) else Nothing
+    , if (rowBelow) then Just (index + width) else Nothing
+    , if (columnRight && rowBelow) then Just (index + width + 1) else Nothing
+    ]
   where
-    columnLeft = (index `mod` width) - 1 >= 0
-    columnRight = (index `mod` width) + 1 < width
-    rowAbove = index - width >= 0
-    rowBelow = (index + width) `div` width < height
+  columnLeft = (index `mod` width) - 1 >= 0
+  columnRight = (index `mod` width) + 1 < width
+  rowAbove = index - width >= 0
+  rowBelow = (index + width) `div` width < height
 
 makeRandomField :: Width -> Height -> Int -> Effect Field
 makeRandomField width height numMines = do
@@ -108,26 +110,28 @@ makeRandomField width height numMines = do
 data RevealResult = Ok Field | Explode
 
 revealAt :: CellIndex -> Field -> RevealResult
-revealAt i field = revealAll [i] field
+revealAt i field = revealAll [ i ] field
 
 revealAll :: Array CellIndex -> Field -> RevealResult
 revealAll indices field =
   case result of
     Nothing -> Explode
     Just newCells -> Ok $ field { cells = newCells }
-  where          
-    result :: Maybe (Array Cell)
-    result = ST.run (runMaybeT do
+  where
+  result :: Maybe (Array Cell)
+  result = ST.run
+    ( runMaybeT do
         cells <- lift $ STArray.unsafeThaw field.cells
         _ <- sequence $ indices <#> \i -> do
-              cell <- lift $ STArray.peek i cells
-              case cell of
-                Nothing -> pure unit
-                Just { player: Open } -> pure unit
-                Just { player: Flag } -> pure unit
-                Just { underlying: Safe _ } -> lift $ void $ STArray.modify i makeOpen cells
-                Just { underlying: Mine } -> MaybeT (pure Nothing)
-        lift $ STArray.unsafeFreeze cells)
+          cell <- lift $ STArray.peek i cells
+          case cell of
+            Nothing -> pure unit
+            Just { player: Open } -> pure unit
+            Just { player: Flag } -> pure unit
+            Just { underlying: Safe _ } -> lift $ void $ STArray.modify i makeOpen cells
+            Just { underlying: Mine } -> MaybeT (pure Nothing)
+        lift $ STArray.unsafeFreeze cells
+    )
 
 toggleFlagAt :: CellIndex -> Field -> Maybe Field
 toggleFlagAt i field = field { cells = _ } <$> modifyAt i toggleFlag field.cells

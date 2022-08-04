@@ -18,7 +18,7 @@
           buildInputs = [
             easy-ps.purs
             easy-ps.spago
-            easy-ps.purty
+            easy-ps.purs-tidy
             pkgs.nodejs
             pkgs.esbuild
           ];

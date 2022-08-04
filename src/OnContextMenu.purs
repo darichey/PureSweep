@@ -10,5 +10,5 @@ import Web.Event.Event (Event, EventType(..))
 contextmenu :: EventType
 contextmenu = EventType "contextmenu"
 
-onContextMenu :: forall r i. (Event -> i) -> IProp ( onContextMenu :: Event | r ) i
+onContextMenu :: forall r i. (Event -> i) -> IProp (onContextMenu :: Event | r) i
 onContextMenu = handler contextmenu

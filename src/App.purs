@@ -107,8 +107,7 @@ fieldComponent =
               []
           ]
 
-type OptionDialInput
-  = { name :: String, num :: Int, min :: Maybe Int, max :: Maybe Int }
+type OptionDialInput = { name :: String, num :: Int, min :: Maybe Int, max :: Maybe Int }
 
 optionDialComponent :: forall query m. H.Component query OptionDialInput Int m
 optionDialComponent =
@@ -123,5 +122,5 @@ optionDialComponent =
 clampMaybe :: Maybe Int -> Maybe Int -> Int -> Int
 clampMaybe low hi x = clamp (fromMaybe bottom low) (fromMaybe top hi) x
 
-twclass :: forall r i. String -> HP.IProp ( class :: String | r ) i
+twclass :: forall r i. String -> HP.IProp (class :: String | r) i
 twclass = HP.prop (PropName "className")
