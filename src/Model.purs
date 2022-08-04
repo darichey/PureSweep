@@ -18,10 +18,11 @@ import Prelude
 
 import Control.Monad.Maybe.Trans (MaybeT(..), lift, runMaybeT)
 import Control.Monad.ST as ST
-import Data.Array (catMaybes, filter, length, modifyAt, replicate, toUnfoldable, (!!), (..))
+import Data.Array (catMaybes, filter, fromFoldable, length, modifyAt, replicate, toUnfoldable, (!!), (..), foldr)
 import Data.Array.ST as STArray
 import Data.HashSet (HashSet)
 import Data.HashSet as HashSet
+import Data.List (List(..), singleton, (:))
 import Data.Maybe (Maybe(..), fromJust)
 import Data.Traversable (sequence)
 import Effect (Effect)
@@ -110,7 +111,22 @@ makeRandomField width height numMines = do
 data RevealResult = Ok Field | Explode
 
 revealAt :: CellIndex -> Field -> RevealResult
-revealAt i field = revealAll [ i ] field
+revealAt i field = revealAll (fromFoldable zeroPropagated) field
+  where
+  zeroPropagated = go (singleton i) HashSet.empty
+
+  go :: List CellIndex -> HashSet CellIndex -> HashSet CellIndex
+  go Nil acc = acc
+  go (next : queue) acc =
+    if HashSet.member next acc then go queue acc
+    else
+      case field.cells !! next of
+        Just { underlying: Safe 0 } -> go (prependAll (getNeighbors next field.width field.height) queue) (HashSet.insert next acc)
+        Just { underlying: Safe _ } -> go queue (HashSet.insert next acc)
+        _ -> go queue acc
+
+  prependAll :: Array CellIndex -> List CellIndex -> List CellIndex
+  prependAll array list = foldr (:) list array
 
 revealAll :: Array CellIndex -> Field -> RevealResult
 revealAll indices field =
