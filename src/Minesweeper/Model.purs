@@ -5,6 +5,7 @@ module Minesweeper.Model
   , Field
   , Height
   , PlayerState(..)
+  , STField
   , UnderlyingCellState(..)
   , Width
   , getNeighbors
@@ -19,10 +20,8 @@ module Minesweeper.Model
 
 import Prelude
 
-import Control.Monad.ST (Region, ST)
+import Control.Monad.ST (Region)
 import Control.Monad.ST as ST
-import Control.Monad.ST.Class (liftST)
-import Control.Monad.ST.Global (Global)
 import Data.Array (catMaybes, replicate, (..))
 import Data.Array.ST (STArray)
 import Data.Array.ST as STArray
@@ -73,8 +72,10 @@ toggleFlag cell = cell
 
 type Dims = { width :: Width, height :: Height }
 
-type Field :: Region -> Type
-type Field h = { cells :: STArray h Cell, dims :: Dims }
+type STField :: Region -> Type
+type STField h = { cells :: STArray h Cell, dims :: Dims }
+
+type Field = { cells :: Array Cell, dims :: Dims }
 
 getNeighbors :: CellIndex -> Width -> Height -> Array CellIndex
 getNeighbors index width height =
@@ -94,19 +95,22 @@ getNeighbors index width height =
   rowAbove = index - width >= 0
   rowBelow = (index + width) `div` width < height
 
-makeField :: forall h. Width -> Height -> HashSet CellIndex -> ST h (Field h)
-makeField width height mineIndices = do
-  cells <- STArray.unsafeThaw $ replicate (width * height) { underlying: Safe 0, player: Closed }
-  ST.foreach (HashSet.toArray mineIndices)
-    ( \i ->
-        do
-          void $ STArray.poke i { underlying: Mine, player: Closed } cells
-          ST.foreach (getNeighbors i width height) (\j -> void $ STArray.modify j incNearby cells)
+makeField :: Width -> Height -> HashSet CellIndex -> Field
+makeField width height mineIndices = { cells, dims: { width, height } }
+  where
+  cells = STArray.run
+    ( do
+        array <- STArray.unsafeThaw $ replicate (width * height) { underlying: Safe 0, player: Closed }
+        ST.foreach (HashSet.toArray mineIndices)
+          ( \i ->
+              do
+                void $ STArray.poke i { underlying: Mine, player: Closed } array
+                ST.foreach (getNeighbors i width height) (\j -> void $ STArray.modify j incNearby array)
+          )
+        pure array
     )
-  pure { cells, dims: { width, height } }
 
-makeRandomField :: Width -> Height -> Int -> Effect (Field Global)
+makeRandomField :: Width -> Height -> Int -> Effect Field
 makeRandomField width height numMines = do
   mineIndices <- sample (0 .. (width * height - 1)) numMines
-  field <- liftST $ makeField width height mineIndices
-  pure field
+  pure $ makeField width height mineIndices

@@ -5,21 +5,20 @@ import Prelude
 import Control.Monad.Except (runExceptT)
 import Control.Monad.Free (foldFree)
 import Control.Monad.ST.Class (liftST)
-import Control.Monad.ST.Global (Global)
 import Data.Array (mapWithIndex)
 import Data.Array.ST as STArray
 import Data.Either (Either(..))
 import Data.Maybe (Maybe(..), fromMaybe)
 import Data.Tuple.Nested ((/\))
 import Effect.Class (class MonadEffect, liftEffect)
-import Minesweeper.Monad (chordAt, revealAt, toggleFlagAt)
-import Minesweeper.Eval (runMinesweeperF)
-import Minesweeper.Model (Field, PlayerState(..), makeRandomField)
 import Halogen as H
 import Halogen.HTML as HH
 import Halogen.HTML.Events as HE
 import Halogen.HTML.Properties as HP
 import Halogen.Hooks as Hooks
+import Minesweeper.Eval (runMinesweeperF)
+import Minesweeper.Model (Field, PlayerState(..), CellIndex, makeRandomField)
+import Minesweeper.Monad (chordAt, revealAt, toggleFlagAt)
 import OnContextMenu (onContextMenu)
 import Type.Proxy (Proxy(..))
 import Web.Event.Event (preventDefault)
@@ -36,13 +35,11 @@ appComponent =
     width /\ widthId <- Hooks.useState 10
     height /\ heightId <- Hooks.useState 10
     mines /\ minesId <- Hooks.useState 10
-    field /\ fieldId <- Hooks.useState Nothing
+    fieldState /\ fieldId <- Hooks.useState Nothing
     Hooks.captures { width, height, mines } Hooks.useTickEffect do
       newField <- liftEffect $ makeRandomField width height mines
       Hooks.put fieldId (Just newField)
       pure Nothing
-    let
-      handleFieldUpdate = \newField -> Hooks.put fieldId (Just newField)
     Hooks.pure
       $ HH.div_
           [ HH.p_ [ HH.text "Options" ]
@@ -62,27 +59,35 @@ appComponent =
               { name: "Mines", num: mines, min: Just 0, max: Just (width * height) }
               (Hooks.put minesId)
           , HH.p_ [ HH.text "Game" ]
-          , case field of
+          , case fieldState of
               Nothing -> HH.div_ [ HH.text "loading" ]
-              Just field -> HH.div_ [ HH.slot _field 3 fieldComponent { field, width, height } handleFieldUpdate ]
+              Just field -> HH.div_ [ HH.slot _field 3 fieldComponent field (handleFieldUpdate field fieldId) ]
           ]
+  where
+  handleFieldUpdate field fieldId playerAction = do
+    let
+      gameAction = case playerAction of
+        RevealAt i -> revealAt i
+        ChordAt i -> chordAt i
+        FlagAt i -> toggleFlagAt i
+    cells <- liftEffect $ liftST $ STArray.unsafeThaw field.cells
+    result <- liftEffect $ liftST $ runExceptT $ foldFree (runMinesweeperF { cells, dims: field.dims }) gameAction
+    newCells <- liftEffect $ liftST $ STArray.unsafeFreeze cells
+    case result of
+      Left _ -> pure unit
+      Right _ -> Hooks.put fieldId (Just field { cells = newCells })
 
-fieldComponent :: forall query m. MonadEffect m => H.Component query { field :: (Field Global), width :: Int, height :: Int } (Field Global) m
+data PlayerAction = RevealAt CellIndex | ChordAt CellIndex | FlagAt CellIndex
+
+fieldComponent :: forall query m. MonadEffect m => H.Component query Field PlayerAction m
 fieldComponent =
-  Hooks.component \{ outputToken } { field, width, height } -> Hooks.do
-    cells /\ cellsId <- Hooks.useState []
-
-    Hooks.captures {} Hooks.useTickEffect do
-      newCells <- liftEffect $ liftST $ STArray.unsafeFreeze field.cells
-      Hooks.put cellsId newCells
-      pure Nothing
-
+  Hooks.component \{ outputToken } field -> Hooks.do
     Hooks.pure
       $ HH.div_
           [ HH.div
               [ twclass "inline-grid gap-1 select-none"
-              , HP.style $ "grid-template-columns: repeat(" <> show width <> ", minmax(0, 1fr))"
-              , HP.style $ "grid-template-rows: repeat(" <> show height <> ", minmax(0, 1fr))"
+              , HP.style $ "grid-template-columns: repeat(" <> show field.dims.width <> ", minmax(0, 1fr))"
+              , HP.style $ "grid-template-rows: repeat(" <> show field.dims.height <> ", minmax(0, 1fr))"
               , HP.draggable false
               ]
               $ mapWithIndex
@@ -91,17 +96,11 @@ fieldComponent =
                         [ twclass "flex text-center justify-center content-center select-none"
                         , HP.draggable false
                         , onContextMenu \event -> liftEffect $ preventDefault event
-                        , HE.onMouseDown \event -> do
-                            let
-                              action = case button event of
-                                0 -> revealAt i
-                                1 -> chordAt i
-                                2 -> toggleFlagAt i
-                                _ -> pure unit
-                            result <- liftEffect $ liftST $ runExceptT $ foldFree (runMinesweeperF field) action
-                            case result of
-                              Left _ -> pure unit
-                              Right _ -> Hooks.raise outputToken field
+                        , HE.onMouseDown \event -> case button event of
+                            0 -> Hooks.raise outputToken (RevealAt i)
+                            1 -> Hooks.raise outputToken (ChordAt i)
+                            2 -> Hooks.raise outputToken (FlagAt i)
+                            _ -> pure unit
                         ]
                         [ HH.img
                             [ twclass "select-none"
@@ -115,7 +114,7 @@ fieldComponent =
                             ]
                         ]
                   )
-                  cells
+                  field.cells
           , HH.div_
               []
           ]

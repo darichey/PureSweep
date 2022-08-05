@@ -8,12 +8,12 @@ import Control.Monad.ST (ST)
 import Data.Array.ST as STArray
 import Data.Maybe (fromJust)
 import Minesweeper.Monad (MinesweeperF(..))
-import Minesweeper.Model (Field)
+import Minesweeper.Model (STField)
 import Partial.Unsafe (unsafePartial)
 
 data Explosion = Explosion
 
-runMinesweeperF :: forall r. Field r -> MinesweeperF ~> ExceptT Explosion (ST r)
+runMinesweeperF :: forall r. STField r -> MinesweeperF ~> ExceptT Explosion (ST r)
 runMinesweeperF field = case _ of
   ModifyCell i f g -> do
     _ <- lift $ STArray.modify i f field.cells
