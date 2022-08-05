@@ -1,0 +1,108 @@
+module Minesweeper.Monad
+  ( MinesweeperF(..)
+  , MinesweeperM
+  , chordAt
+  , toggleFlagAt
+  , revealAt
+  ) where
+
+import Prelude
+
+import Control.Monad.Free (Free, liftF)
+import Data.Array (filterA, fromFoldable, length, toUnfoldable)
+import Data.HashSet (HashSet)
+import Data.HashSet as HashSet
+import Data.List (List(..), foldr, (:))
+import Data.Traversable (sequence)
+import Minesweeper.Model (Cell, CellIndex, PlayerState(..), UnderlyingCellState(..), Dims, isClosed, isFlag, makeOpen, toggleFlag)
+import Minesweeper.Model as Model
+
+data MinesweeperF a
+  = ModifyCell CellIndex (Cell -> Cell) (Cell -> a)
+  | Explode
+  | GetDims (Dims -> a)
+
+type MinesweeperM = Free MinesweeperF
+
+get :: CellIndex -> MinesweeperM Cell
+get i = liftF (ModifyCell i identity identity)
+
+modify_ :: CellIndex -> (Cell -> Cell) -> MinesweeperM Unit
+modify_ i f = void $ liftF (ModifyCell i f identity)
+
+explode :: MinesweeperM Unit
+explode = liftF Explode
+
+getDims :: MinesweeperM Dims
+getDims = liftF (GetDims identity)
+
+ok :: MinesweeperM Unit
+ok = pure unit
+
+openCell :: CellIndex -> MinesweeperM Unit
+openCell i = modify_ i makeOpen
+
+getNeighbors :: CellIndex -> MinesweeperM (Array CellIndex)
+getNeighbors index = do
+  { width, height } <- getDims
+  pure $ Model.getNeighbors index width height
+
+revealAt :: CellIndex -> MinesweeperM Unit
+revealAt i = revealWithZeroProp [ i ]
+
+revealWithZeroProp :: Array CellIndex -> MinesweeperM Unit
+revealWithZeroProp indices = do
+  zeroPropagated <- getZeroPropagated (toUnfoldable indices) HashSet.empty Nil
+  revealAll (fromFoldable zeroPropagated)
+
+  where
+  getZeroPropagated :: List CellIndex -> HashSet CellIndex -> List CellIndex -> MinesweeperM (List CellIndex)
+  getZeroPropagated Nil _ acc = pure acc
+  getZeroPropagated (next : stack) visited acc =
+    if HashSet.member next visited then getZeroPropagated stack visited acc
+    else
+      do
+        nextCell <- get next
+        case nextCell of
+          { underlying: Safe 0 } -> do
+            neighbors <- getNeighbors next
+            getZeroPropagated (pushAll neighbors stack) (HashSet.insert next visited) (next : acc)
+          { underlying: Safe _ } -> getZeroPropagated stack (HashSet.insert next visited) (next : acc)
+          _ -> getZeroPropagated stack visited acc
+    where
+    pushAll :: Array CellIndex -> List CellIndex -> List CellIndex
+    pushAll array list = foldr (:) list array
+
+revealAll :: Array CellIndex -> MinesweeperM Unit
+revealAll indices = do
+  void $ sequence $ indices <#> \i -> do
+    cell <- get i
+    case cell of
+      { player: Open } -> ok
+      { player: Flag } -> ok
+      { underlying: Safe _ } -> openCell i
+      { underlying: Mine } -> explode
+
+toggleFlagAt :: CellIndex -> MinesweeperM Unit
+toggleFlagAt i = modify_ i toggleFlag
+
+chordAt :: CellIndex -> MinesweeperM Unit
+chordAt i = do
+  cell <- get i
+  case cell of
+    { player: Flag } -> ok
+    { player: Closed } -> ok
+    -- if it's safe, try to chord there
+    { player: Open, underlying: Safe nearby } -> do
+      neighbors <- getNeighbors i
+      numNearbyFlags <- length <$> filterA (\j -> isFlag <$> get j) neighbors
+      if numNearbyFlags == nearby then
+        -- do the chord by revealing each closed neighbor
+        do
+          nearbyClosed <- filterA (\j -> isClosed <$> get j) neighbors
+          revealWithZeroProp nearbyClosed
+      else
+        -- if the number of nearby flags is not equal to the number of nearby mines, do nothing
+        ok
+    -- this should be impossible. TODO: is our model off?
+    { player: Open, underlying: Mine } -> ok

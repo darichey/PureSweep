@@ -2,19 +2,24 @@ module App (appComponent) where
 
 import Prelude
 
+import Control.Monad.Except (runExceptT)
+import Control.Monad.Free (foldFree)
 import Control.Monad.ST.Class (liftST)
 import Control.Monad.ST.Global (Global)
 import Data.Array (mapWithIndex)
 import Data.Array.ST as STArray
+import Data.Either (Either(..))
 import Data.Maybe (Maybe(..), fromMaybe)
 import Data.Tuple.Nested ((/\))
 import Effect.Class (class MonadEffect, liftEffect)
+import Minesweeper.Monad (chordAt, revealAt, toggleFlagAt)
+import Minesweeper.Eval (runMinesweeperF)
+import Minesweeper.Model (Field, PlayerState(..), makeRandomField)
 import Halogen as H
 import Halogen.HTML as HH
 import Halogen.HTML.Events as HE
 import Halogen.HTML.Properties as HP
 import Halogen.Hooks as Hooks
-import Model (Field, PlayerState(..), RevealResult(..), chordAt, makeRandomField, revealAt, toggleFlagAt)
 import OnContextMenu (onContextMenu)
 import Type.Proxy (Proxy(..))
 import Web.Event.Event (preventDefault)
@@ -86,25 +91,17 @@ fieldComponent =
                         [ twclass "flex text-center justify-center content-center select-none"
                         , HP.draggable false
                         , onContextMenu \event -> liftEffect $ preventDefault event
-                        , HE.onMouseDown \event ->
-                            case button event of
-                              0 -> do
-                                result <- liftEffect $ liftST $ revealAt i field
-                                case result of
-                                  Ok -> Hooks.raise outputToken field
-                                  _ -> pure unit
-                              1 -> do
-                                result <- liftEffect $ liftST $ chordAt i field
-                                case result of
-                                  Ok -> Hooks.raise outputToken field
-                                  _ -> pure unit
-                              2 -> do
-                                result <- liftEffect $ liftST $ toggleFlagAt i field
-                                if result then
-                                  Hooks.raise outputToken field
-                                else
-                                  pure unit
-                              _ -> pure unit
+                        , HE.onMouseDown \event -> do
+                            let
+                              action = case button event of
+                                0 -> revealAt i
+                                1 -> chordAt i
+                                2 -> toggleFlagAt i
+                                _ -> pure unit
+                            result <- liftEffect $ liftST $ runExceptT $ foldFree (runMinesweeperF field) action
+                            case result of
+                              Left _ -> pure unit
+                              Right _ -> Hooks.raise outputToken field
                         ]
                         [ HH.img
                             [ twclass "select-none"
