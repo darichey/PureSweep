@@ -16,7 +16,7 @@ import Halogen.HTML as HH
 import Halogen.HTML.Events as HE
 import Halogen.HTML.Properties as HP
 import Halogen.Hooks as Hooks
-import Minesweeper.Eval (runMinesweeperF)
+import Minesweeper.Eval (runMinesweeperFWithLogging)
 import Minesweeper.Model (Field, PlayerState(..), CellIndex, makeRandomField)
 import Minesweeper.Monad (chordAt, revealAt, toggleFlagAt)
 import OnContextMenu (onContextMenu)
@@ -70,8 +70,9 @@ appComponent =
         RevealAt i -> revealAt i
         ChordAt i -> chordAt i
         FlagAt i -> toggleFlagAt i
-    cells <- liftEffect $ liftST $ STArray.unsafeThaw field.cells
-    result <- liftEffect $ liftST $ runExceptT $ foldFree (runMinesweeperF { cells, dims: field.dims }) gameAction
+    cells <- liftEffect $ liftST $ STArray.thaw field.cells
+    -- result <- liftEffect $ liftST $ runExceptT $ foldFree (runMinesweeperF { cells, dims: field.dims }) gameAction
+    result <- liftEffect $ runExceptT $ foldFree (runMinesweeperFWithLogging { cells, dims: field.dims }) gameAction
     newCells <- liftEffect $ liftST $ STArray.unsafeFreeze cells
     case result of
       Left _ -> pure unit

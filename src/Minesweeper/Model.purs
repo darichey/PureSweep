@@ -43,10 +43,19 @@ instance Show UnderlyingCellState where
   show Mine = "*"
   show (Safe nearby) = show nearby
 
+derive instance Eq UnderlyingCellState
+
 data PlayerState
   = Open
   | Closed
   | Flag
+
+instance Show PlayerState where
+  show Open = "Open"
+  show Closed = "Closed"
+  show Flag = "Flag"
+
+derive instance Eq PlayerState
 
 type Cell = { underlying :: UnderlyingCellState, player :: PlayerState }
 
@@ -104,7 +113,7 @@ makeField width height mineIndices = { cells, dims: { width, height } }
         ST.foreach (HashSet.toArray mineIndices)
           ( \i ->
               do
-                void $ STArray.poke i { underlying: Mine, player: Closed } array
+                _ <- STArray.poke i { underlying: Mine, player: Closed } array
                 ST.foreach (getNeighbors i width height) (\j -> void $ STArray.modify j incNearby array)
           )
         pure array

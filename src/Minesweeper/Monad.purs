@@ -12,8 +12,10 @@ import Control.Monad.Free (Free, liftF)
 import Data.Array (filterA, fromFoldable, length, toUnfoldable)
 import Data.HashSet (HashSet)
 import Data.HashSet as HashSet
-import Data.List (List(..), foldr, (:))
+import Data.List (List(..), foldr, sort, (:))
 import Data.Traversable (sequence)
+import Effect.Console as Console
+import Effect.Unsafe (unsafePerformEffect)
 import Minesweeper.Model (Cell, CellIndex, PlayerState(..), UnderlyingCellState(..), Dims, isClosed, isFlag, makeOpen, toggleFlag)
 import Minesweeper.Model as Model
 
@@ -21,6 +23,8 @@ data MinesweeperF a
   = ModifyCell CellIndex (Cell -> Cell) (Cell -> a)
   | Explode
   | GetDims (Dims -> a)
+
+derive instance Functor MinesweeperF
 
 type MinesweeperM = Free MinesweeperF
 
@@ -52,8 +56,14 @@ revealAt i = revealWithZeroProp [ i ]
 
 revealWithZeroProp :: Array CellIndex -> MinesweeperM Unit
 revealWithZeroProp indices = do
+  -- first, try to reveal the indices we're immediately interested in
+  -- it's possible that one of these is a mine, and we're done
+  revealAll indices
+  -- assuming the above succeeded, now we can handle zero propagation
+  -- the cells here must be safe, so we can reveal them without checking for game over
+  -- FIXME: this needlessly tries to modify the cells corresponding to `indices` again
   zeroPropagated <- getZeroPropagated (toUnfoldable indices) HashSet.empty Nil
-  revealAll (fromFoldable zeroPropagated)
+  revealAllUnchecked (fromFoldable zeroPropagated)
 
   where
   getZeroPropagated :: List CellIndex -> HashSet CellIndex -> List CellIndex -> MinesweeperM (List CellIndex)
@@ -72,6 +82,9 @@ revealWithZeroProp indices = do
     where
     pushAll :: Array CellIndex -> List CellIndex -> List CellIndex
     pushAll array list = foldr (:) list array
+
+revealAllUnchecked :: Array CellIndex -> MinesweeperM Unit
+revealAllUnchecked indices = void $ sequence $ openCell <$> indices
 
 revealAll :: Array CellIndex -> MinesweeperM Unit
 revealAll indices = do
