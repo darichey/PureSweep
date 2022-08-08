@@ -36,10 +36,11 @@ appComponent =
     height /\ heightId <- Hooks.useState 10
     mines /\ minesId <- Hooks.useState 10
     fieldState /\ fieldId <- Hooks.useState Nothing
+
     Hooks.captures { width, height, mines } Hooks.useTickEffect do
-      newField <- liftEffect $ makeRandomField width height mines
-      Hooks.put fieldId (Just newField)
+      generateNewField width height mines fieldId
       pure Nothing
+
     Hooks.pure
       $ HH.div_
           [ HH.p_ [ HH.text "Options" ]
@@ -58,12 +59,17 @@ appComponent =
           , HH.slot _optionDial 2 optionDialComponent
               { name: "Mines", num: mines, min: Just 0, max: Just (width * height) }
               (Hooks.put minesId)
+          , HH.button [ HE.onClick \_ -> generateNewField width height mines fieldId ] [ HH.text "New Game" ]
           , HH.p_ [ HH.text "Game" ]
           , case fieldState of
               Nothing -> HH.div_ [ HH.text "loading" ]
               Just field -> HH.div_ [ HH.slot _field 3 fieldComponent field (handleFieldUpdate field fieldId) ]
           ]
   where
+  generateNewField width height mines fieldId = do
+    newField <- liftEffect $ makeRandomField width height mines
+    Hooks.put fieldId (Just newField)
+
   handleFieldUpdate field fieldId playerAction = do
     let
       gameAction = case playerAction of
