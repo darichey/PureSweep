@@ -10,17 +10,20 @@ import Data.Array.ST as STArray
 import Data.Either (Either(..))
 import Data.Maybe (Maybe(..), fromMaybe)
 import Data.Tuple.Nested ((/\))
+import Effect.Aff.Class (class MonadAff)
 import Effect.Class (class MonadEffect, liftEffect)
 import Halogen as H
 import Halogen.HTML as HH
 import Halogen.HTML.Events as HE
 import Halogen.HTML.Properties as HP
+import Halogen.Hooks (HookM, StateId)
 import Halogen.Hooks as Hooks
 import Minesweeper.Eval (runMinesweeperF)
-import Minesweeper.Model (Field, PlayerState(..), CellIndex, makeRandomField)
+import Minesweeper.Model (CellIndex, Field, PlayerState(..), makeRandomField)
 import Minesweeper.Monad (chordAt, revealAt, toggleFlagAt)
 import OnContextMenu (onContextMenu)
 import Type.Proxy (Proxy(..))
+import UseTimer (useTimer)
 import Web.Event.Event (preventDefault)
 import Web.HTML.Common (PropName(..))
 import Web.UIEvent.MouseEvent (button)
@@ -29,17 +32,30 @@ _field = Proxy :: Proxy "field"
 
 _optionDial = Proxy :: Proxy "optionDial"
 
-appComponent :: forall query input output m. MonadEffect m => H.Component query input output m
+data PlayerAction = RevealAt CellIndex | ChordAt CellIndex | FlagAt CellIndex
+
+appComponent :: forall query input output m. MonadAff m => H.Component query input output m
 appComponent =
   Hooks.component \_ _ -> Hooks.do
     width /\ widthId <- Hooks.useState 10
     height /\ heightId <- Hooks.useState 10
     mines /\ minesId <- Hooks.useState 10
     fieldState /\ fieldId <- Hooks.useState Nothing
+    playing /\ playingId <- Hooks.useState false
+    { time, start: startTimer, pause: pauseTimer, reset: resetTimer } <- useTimer
 
+    let
+      resetGame = do
+        pauseTimer
+        resetTimer
+        newField <- liftEffect $ makeRandomField width height mines
+        Hooks.put fieldId (Just newField)
+        Hooks.put playingId false
+
+    -- on first render, and any time width, height, or mines change, reset the game
     Hooks.captures { width, height, mines } Hooks.useTickEffect do
-      generateNewField width height mines fieldId
-      pure Nothing
+      resetGame
+      pure Nothing -- no cleanup hook
 
     Hooks.pure
       $ HH.div_
@@ -59,31 +75,33 @@ appComponent =
           , HH.slot _optionDial 2 optionDialComponent
               { name: "Mines", num: mines, min: Just 0, max: Just (width * height) }
               (Hooks.put minesId)
-          , HH.button [ HE.onClick \_ -> generateNewField width height mines fieldId ] [ HH.text "New Game" ]
+          , HH.button [ HE.onClick \_ -> resetGame ] [ HH.text "New Game" ]
+          , HH.div_ [ HH.text $ show time ]
           , HH.p_ [ HH.text "Game" ]
           , case fieldState of
               Nothing -> HH.div_ [ HH.text "loading" ]
-              Just field -> HH.div_ [ HH.slot _field 3 fieldComponent field (handleFieldUpdate field fieldId) ]
+              Just field -> HH.div_ [ HH.slot _field 3 fieldComponent field (handleFieldUpdate field fieldId playing playingId startTimer) ]
           ]
   where
-  generateNewField width height mines fieldId = do
-    newField <- liftEffect $ makeRandomField width height mines
-    Hooks.put fieldId (Just newField)
+  handleFieldUpdate :: Field -> StateId (Maybe Field) -> Boolean -> StateId Boolean -> HookM m Unit -> PlayerAction -> HookM m Unit
+  handleFieldUpdate field fieldId playing playingId startTimer playerAction = do
+    when (not playing) do
+      startTimer
+      Hooks.put playingId true
 
-  handleFieldUpdate field fieldId playerAction = do
     let
       gameAction = case playerAction of
         RevealAt i -> revealAt i
         ChordAt i -> chordAt i
         FlagAt i -> toggleFlagAt i
+
     cells <- liftEffect $ liftST $ STArray.unsafeThaw field.cells
     result <- liftEffect $ liftST $ runExceptT $ foldFree (runMinesweeperF { cells, dims: field.dims }) gameAction
     newCells <- liftEffect $ liftST $ STArray.unsafeFreeze cells
+
     case result of
       Left _ -> pure unit
       Right _ -> Hooks.put fieldId (Just field { cells = newCells })
-
-data PlayerAction = RevealAt CellIndex | ChordAt CellIndex | FlagAt CellIndex
 
 fieldComponent :: forall query m. MonadEffect m => H.Component query Field PlayerAction m
 fieldComponent =
