@@ -84,13 +84,13 @@ appComponent =
               Nothing -> HH.div_ [ HH.text "loading" ]
               Just field' -> HH.div_ [ HH.slot _field 3 fieldComponent field' (handleFieldUpdate field' fieldId gameState gameStateId startTimer pauseTimer) ]
           , HH.div_
-            [ HH.text $
-                case gameState of
-                  New -> "New"
-                  Playing -> "Playing"
-                  Done Win -> "Win"
-                  Done Lose -> "Lose"
-            ]
+              [ HH.text $
+                  case gameState of
+                    New -> "New"
+                    Playing -> "Playing"
+                    Done Win -> "Win"
+                    Done Lose -> "Lose"
+              ]
           ]
   where
   handleFieldUpdate :: Field -> StateId (Maybe Field) -> GameState -> StateId GameState -> HookM m Unit -> HookM m Unit -> PlayerAction -> HookM m Unit
@@ -99,25 +99,29 @@ appComponent =
       New -> do
         startTimer
         Hooks.put gameStateId Playing
-      _ -> pure unit
+        doAction
+      Playing -> doAction
+      Done _ -> pure unit
 
-    let
-      gameAction = case playerAction of
-        RevealAt i -> revealAt i
-        ChordAt i -> chordAt i
-        FlagAt i -> toggleFlagAt i
+    where
+    doAction = do
+      let
+        gameAction = case playerAction of
+          RevealAt i -> revealAt i
+          ChordAt i -> chordAt i
+          FlagAt i -> toggleFlagAt i
 
-    cells <- liftEffect $ liftST $ STArray.unsafeThaw field.cells
-    remainingSafe <- liftEffect $ liftST $ STRef.new field.remainingSafe
-    result <- liftEffect $ liftST $ runExceptT $ foldFree (runMinesweeperF { cells, dims: field.dims, remainingSafe }) gameAction
-    newCells <- liftEffect $ liftST $ STArray.unsafeFreeze cells
-    newRemainingSafe <- liftEffect $ liftST $ STRef.read remainingSafe
+      cells <- liftEffect $ liftST $ STArray.unsafeThaw field.cells
+      remainingSafe <- liftEffect $ liftST $ STRef.new field.remainingSafe
+      result <- liftEffect $ liftST $ runExceptT $ foldFree (runMinesweeperF { cells, dims: field.dims, remainingSafe }) gameAction
+      newCells <- liftEffect $ liftST $ STArray.unsafeFreeze cells
+      newRemainingSafe <- liftEffect $ liftST $ STRef.read remainingSafe
 
-    case result of
-      Left kind -> do
-        pauseTimer
-        Hooks.put gameStateId (Done kind)
-      Right _ -> Hooks.put fieldId (Just field { cells = newCells, remainingSafe = newRemainingSafe })
+      case result of
+        Left kind -> do
+          pauseTimer
+          Hooks.put gameStateId (Done kind)
+        Right _ -> Hooks.put fieldId (Just field { cells = newCells, remainingSafe = newRemainingSafe })
 
 fieldComponent :: forall query m. MonadEffect m => H.Component query Field PlayerAction m
 fieldComponent =
