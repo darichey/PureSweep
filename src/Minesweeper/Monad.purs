@@ -21,6 +21,7 @@ data MinesweeperF a
   = ModifyCell CellIndex (Cell -> Cell) (Cell -> a)
   | GameOver GameOverKind
   | GetRemainingSafe (HashSet CellIndex -> a)
+  | GetMineIndices (HashSet CellIndex -> a)
   | GetDims (Dims -> a)
 
 derive instance Functor MinesweeperF
@@ -42,6 +43,9 @@ win = liftF (GameOver Win)
 getRemainingSafe :: MinesweeperM (HashSet CellIndex)
 getRemainingSafe = liftF (GetRemainingSafe identity)
 
+getMineIndices :: MinesweeperM (HashSet CellIndex)
+getMineIndices = liftF (GetMineIndices identity)
+
 getDims :: MinesweeperM Dims
 getDims = liftF (GetDims identity)
 
@@ -50,6 +54,9 @@ ok = pure unit
 
 openCell :: CellIndex -> MinesweeperM Unit
 openCell i = modify_ i makeOpen
+
+flagCell :: CellIndex -> MinesweeperM Unit
+flagCell i = modify_ i $ \cell -> cell { player = Flag }
 
 getNeighbors :: CellIndex -> MinesweeperM (Array CellIndex)
 getNeighbors index = do
@@ -107,7 +114,14 @@ revealAll indices = do
 checkWin :: MinesweeperM Unit
 checkWin = do
   remainingSafe <- getRemainingSafe
-  when (HashSet.isEmpty remainingSafe) win
+  when (HashSet.isEmpty remainingSafe) do
+    flagAllMines
+    win
+
+flagAllMines :: MinesweeperM Unit
+flagAllMines = do
+  mineIndices <- getMineIndices
+  void $ sequence $ flagCell <$> HashSet.toArray mineIndices
 
 toggleFlagAt :: CellIndex -> MinesweeperM Unit
 toggleFlagAt i = modify_ i toggleFlag

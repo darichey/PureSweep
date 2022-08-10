@@ -86,9 +86,9 @@ toggleFlag cell = cell
 type Dims = { width :: Width, height :: Height }
 
 type STField :: Region -> Type
-type STField h = { cells :: STArray h Cell, dims :: Dims, remainingSafe :: STRef h (HashSet CellIndex) }
+type STField h = { cells :: STArray h Cell, dims :: Dims, remainingSafe :: STRef h (HashSet CellIndex), mineIndices :: HashSet CellIndex }
 
-type Field = { cells :: Array Cell, dims :: Dims, remainingSafe :: HashSet CellIndex }
+type Field = { cells :: Array Cell, dims :: Dims, remainingSafe :: HashSet CellIndex, mineIndices :: HashSet CellIndex }
 
 getNeighbors :: CellIndex -> Width -> Height -> Array CellIndex
 getNeighbors index width height =
@@ -109,7 +109,7 @@ getNeighbors index width height =
   rowBelow = (index + width) `div` width < height
 
 makeField :: Width -> Height -> HashSet CellIndex -> Field
-makeField width height mineIndices = { cells, dims: { width, height }, remainingSafe }
+makeField width height mineIndices = { cells, dims: { width, height }, remainingSafe, mineIndices }
   where
   cells = STArray.run
     ( do

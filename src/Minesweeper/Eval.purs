@@ -29,4 +29,5 @@ runMinesweeperF field = case _ of
   GetRemainingSafe f -> do
     remainingSafe <- lift $ STRef.read field.remainingSafe
     pure $ f remainingSafe
+  GetMineIndices f -> pure $ f field.mineIndices
   GetDims f -> pure $ f field.dims

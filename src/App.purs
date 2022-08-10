@@ -113,7 +113,7 @@ appComponent =
 
       cells <- liftEffect $ liftST $ STArray.unsafeThaw field.cells
       remainingSafe <- liftEffect $ liftST $ STRef.new field.remainingSafe
-      result <- liftEffect $ liftST $ runExceptT $ foldFree (runMinesweeperF { cells, dims: field.dims, remainingSafe }) gameAction
+      result <- liftEffect $ liftST $ runExceptT $ foldFree (runMinesweeperF (field { cells = cells, remainingSafe = remainingSafe })) gameAction
       newCells <- liftEffect $ liftST $ STArray.unsafeFreeze cells
       newRemainingSafe <- liftEffect $ liftST $ STRef.read remainingSafe
 
