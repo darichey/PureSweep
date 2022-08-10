@@ -12,16 +12,15 @@ import Control.Monad.Free (Free, liftF)
 import Data.Array (filterA, fromFoldable, length, toUnfoldable)
 import Data.HashSet (HashSet)
 import Data.HashSet as HashSet
-import Data.List (List(..), foldr, sort, (:))
+import Data.List (List(..), foldr, (:))
 import Data.Traversable (sequence)
-import Effect.Console as Console
-import Effect.Unsafe (unsafePerformEffect)
-import Minesweeper.Model (Cell, CellIndex, PlayerState(..), UnderlyingCellState(..), Dims, isClosed, isFlag, makeOpen, toggleFlag)
+import Minesweeper.Model (Cell, Dims, GameOverKind(..), PlayerState(..), UnderlyingCellState(..), CellIndex, isClosed, isFlag, makeOpen, toggleFlag)
 import Minesweeper.Model as Model
 
 data MinesweeperF a
   = ModifyCell CellIndex (Cell -> Cell) (Cell -> a)
-  | Explode
+  | GameOver GameOverKind
+  | GetRemainingSafe (HashSet CellIndex -> a)
   | GetDims (Dims -> a)
 
 derive instance Functor MinesweeperF
@@ -34,8 +33,14 @@ get i = liftF (ModifyCell i identity identity)
 modify_ :: CellIndex -> (Cell -> Cell) -> MinesweeperM Unit
 modify_ i f = void $ liftF (ModifyCell i f identity)
 
-explode :: MinesweeperM Unit
-explode = liftF Explode
+lose :: MinesweeperM Unit
+lose = liftF (GameOver Lose)
+
+win :: MinesweeperM Unit
+win = liftF (GameOver Win)
+
+getRemainingSafe :: MinesweeperM (HashSet CellIndex)
+getRemainingSafe = liftF (GetRemainingSafe identity)
 
 getDims :: MinesweeperM Dims
 getDims = liftF (GetDims identity)
@@ -84,17 +89,25 @@ revealWithZeroProp indices = do
     pushAll array list = foldr (:) list array
 
 revealAllUnchecked :: Array CellIndex -> MinesweeperM Unit
-revealAllUnchecked indices = void $ sequence $ openCell <$> indices
+revealAllUnchecked indices = do
+  _ <- sequence $ openCell <$> indices
+  checkWin
 
 revealAll :: Array CellIndex -> MinesweeperM Unit
 revealAll indices = do
-  void $ sequence $ indices <#> \i -> do
+  _ <- sequence $ indices <#> \i -> do
     cell <- get i
     case cell of
       { player: Open } -> ok
       { player: Flag } -> ok
       { underlying: Safe _ } -> openCell i
-      { underlying: Mine } -> explode
+      { underlying: Mine } -> lose
+  checkWin
+
+checkWin :: MinesweeperM Unit
+checkWin = do
+  remainingSafe <- getRemainingSafe
+  when (HashSet.isEmpty remainingSafe) win
 
 toggleFlagAt :: CellIndex -> MinesweeperM Unit
 toggleFlagAt i = modify_ i toggleFlag

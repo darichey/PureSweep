@@ -3,6 +3,7 @@ module Minesweeper.Model
   , CellIndex(..)
   , Dims
   , Field
+  , GameOverKind(..)
   , Height
   , PlayerState(..)
   , STField
@@ -22,6 +23,7 @@ import Prelude
 
 import Control.Monad.ST (Region)
 import Control.Monad.ST as ST
+import Control.Monad.ST.Ref (STRef)
 import Data.Array (catMaybes, replicate, (..))
 import Data.Array.ST (STArray)
 import Data.Array.ST as STArray
@@ -30,6 +32,8 @@ import Data.HashSet as HashSet
 import Data.Maybe (Maybe(..))
 import Effect (Effect)
 import Sample (sample)
+
+data GameOverKind = Win | Lose
 
 type Width = Int
 type Height = Int
@@ -82,9 +86,9 @@ toggleFlag cell = cell
 type Dims = { width :: Width, height :: Height }
 
 type STField :: Region -> Type
-type STField h = { cells :: STArray h Cell, dims :: Dims }
+type STField h = { cells :: STArray h Cell, dims :: Dims, remainingSafe :: STRef h (HashSet CellIndex) }
 
-type Field = { cells :: Array Cell, dims :: Dims }
+type Field = { cells :: Array Cell, dims :: Dims, remainingSafe :: HashSet CellIndex }
 
 getNeighbors :: CellIndex -> Width -> Height -> Array CellIndex
 getNeighbors index width height =
@@ -105,7 +109,7 @@ getNeighbors index width height =
   rowBelow = (index + width) `div` width < height
 
 makeField :: Width -> Height -> HashSet CellIndex -> Field
-makeField width height mineIndices = { cells, dims: { width, height } }
+makeField width height mineIndices = { cells, dims: { width, height }, remainingSafe }
   where
   cells = STArray.run
     ( do
@@ -118,6 +122,8 @@ makeField width height mineIndices = { cells, dims: { width, height } }
           )
         pure array
     )
+
+  remainingSafe = HashSet.difference (HashSet.fromArray (0 .. (width * height - 1))) mineIndices
 
 makeRandomField :: Width -> Height -> Int -> Effect Field
 makeRandomField width height numMines = do

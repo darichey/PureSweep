@@ -5,6 +5,7 @@ import Prelude
 import Control.Monad.Except (runExceptT)
 import Control.Monad.Free (foldFree)
 import Control.Monad.ST.Class (liftST)
+import Control.Monad.ST.Ref as STRef
 import Data.Array (mapWithIndex)
 import Data.Array.ST as STArray
 import Data.Either (Either(..))
@@ -19,7 +20,7 @@ import Halogen.HTML.Properties as HP
 import Halogen.Hooks (HookM, StateId)
 import Halogen.Hooks as Hooks
 import Minesweeper.Eval (runMinesweeperF)
-import Minesweeper.Model (CellIndex, Field, PlayerState(..), makeRandomField)
+import Minesweeper.Model (CellIndex, Field, GameOverKind(..), PlayerState(..), makeRandomField)
 import Minesweeper.Monad (chordAt, revealAt, toggleFlagAt)
 import OnContextMenu (onContextMenu)
 import Type.Proxy (Proxy(..))
@@ -33,6 +34,7 @@ _field = Proxy :: Proxy "field"
 _optionDial = Proxy :: Proxy "optionDial"
 
 data PlayerAction = RevealAt CellIndex | ChordAt CellIndex | FlagAt CellIndex
+data GameState = New | Playing | Done GameOverKind
 
 appComponent :: forall query input output m. MonadAff m => H.Component query input output m
 appComponent =
@@ -40,9 +42,9 @@ appComponent =
     width /\ widthId <- Hooks.useState 10
     height /\ heightId <- Hooks.useState 10
     mines /\ minesId <- Hooks.useState 10
-    fieldState /\ fieldId <- Hooks.useState Nothing
-    playing /\ playingId <- Hooks.useState false
+    field /\ fieldId <- Hooks.useState Nothing
     { time, start: startTimer, pause: pauseTimer, reset: resetTimer } <- useTimer
+    gameState /\ gameStateId <- Hooks.useState New
 
     let
       resetGame = do
@@ -50,7 +52,7 @@ appComponent =
         resetTimer
         newField <- liftEffect $ makeRandomField width height mines
         Hooks.put fieldId (Just newField)
-        Hooks.put playingId false
+        Hooks.put gameStateId New
 
     -- on first render, and any time width, height, or mines change, reset the game
     Hooks.captures { width, height, mines } Hooks.useTickEffect do
@@ -78,16 +80,26 @@ appComponent =
           , HH.button [ HE.onClick \_ -> resetGame ] [ HH.text "New Game" ]
           , HH.div_ [ HH.text $ show time ]
           , HH.p_ [ HH.text "Game" ]
-          , case fieldState of
+          , case field of
               Nothing -> HH.div_ [ HH.text "loading" ]
-              Just field -> HH.div_ [ HH.slot _field 3 fieldComponent field (handleFieldUpdate field fieldId playing playingId startTimer) ]
+              Just field' -> HH.div_ [ HH.slot _field 3 fieldComponent field' (handleFieldUpdate field' fieldId gameState gameStateId startTimer pauseTimer) ]
+          , HH.div_
+            [ HH.text $
+                case gameState of
+                  New -> "New"
+                  Playing -> "Playing"
+                  Done Win -> "Win"
+                  Done Lose -> "Lose"
+            ]
           ]
   where
-  handleFieldUpdate :: Field -> StateId (Maybe Field) -> Boolean -> StateId Boolean -> HookM m Unit -> PlayerAction -> HookM m Unit
-  handleFieldUpdate field fieldId playing playingId startTimer playerAction = do
-    when (not playing) do
-      startTimer
-      Hooks.put playingId true
+  handleFieldUpdate :: Field -> StateId (Maybe Field) -> GameState -> StateId GameState -> HookM m Unit -> HookM m Unit -> PlayerAction -> HookM m Unit
+  handleFieldUpdate field fieldId gameState gameStateId startTimer pauseTimer playerAction = do
+    case gameState of
+      New -> do
+        startTimer
+        Hooks.put gameStateId Playing
+      _ -> pure unit
 
     let
       gameAction = case playerAction of
@@ -96,12 +108,16 @@ appComponent =
         FlagAt i -> toggleFlagAt i
 
     cells <- liftEffect $ liftST $ STArray.unsafeThaw field.cells
-    result <- liftEffect $ liftST $ runExceptT $ foldFree (runMinesweeperF { cells, dims: field.dims }) gameAction
+    remainingSafe <- liftEffect $ liftST $ STRef.new field.remainingSafe
+    result <- liftEffect $ liftST $ runExceptT $ foldFree (runMinesweeperF { cells, dims: field.dims, remainingSafe }) gameAction
     newCells <- liftEffect $ liftST $ STArray.unsafeFreeze cells
+    newRemainingSafe <- liftEffect $ liftST $ STRef.read remainingSafe
 
     case result of
-      Left _ -> pure unit
-      Right _ -> Hooks.put fieldId (Just field { cells = newCells })
+      Left kind -> do
+        pauseTimer
+        Hooks.put gameStateId (Done kind)
+      Right _ -> Hooks.put fieldId (Just field { cells = newCells, remainingSafe = newRemainingSafe })
 
 fieldComponent :: forall query m. MonadEffect m => H.Component query Field PlayerAction m
 fieldComponent =
