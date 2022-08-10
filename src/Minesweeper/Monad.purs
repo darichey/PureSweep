@@ -88,15 +88,14 @@ revealWithZeroProp indices = do
   getZeroPropagated Nil _ acc = pure acc
   getZeroPropagated (next : stack) visited acc =
     if HashSet.member next visited then getZeroPropagated stack visited acc
-    else
-      do
-        nextCell <- get next
-        case nextCell of
-          { underlying: Safe 0 } -> do
-            neighbors <- getNeighbors next
-            getZeroPropagated (pushAll neighbors stack) (HashSet.insert next visited) (next : acc)
-          { underlying: Safe _ } -> getZeroPropagated stack (HashSet.insert next visited) (next : acc)
-          _ -> getZeroPropagated stack visited acc
+    else get next >>= case _ of
+      { underlying: Safe 0 } -> do
+        neighbors <- getNeighbors next
+        getZeroPropagated (pushAll neighbors stack) (HashSet.insert next visited) (next : acc)
+      { underlying: Safe _ } ->
+        getZeroPropagated stack (HashSet.insert next visited) (next : acc)
+      _ ->
+        getZeroPropagated stack visited acc
     where
     pushAll :: Array CellIndex -> List CellIndex -> List CellIndex
     pushAll array list = foldr (:) list array
@@ -108,13 +107,11 @@ revealAllUnchecked indices = do
 
 revealAll :: Array CellIndex -> MinesweeperM Unit
 revealAll indices = do
-  _ <- sequence $ indices <#> \i -> do
-    cell <- get i
-    case cell of
-      { player: Open } -> ok
-      { player: Flag } -> ok
-      { underlying: Safe _ } -> openCell i
-      { underlying: Mine } -> lose
+  _ <- sequence $ indices <#> \i -> get i >>= case _ of
+    { player: Open } -> ok
+    { player: Flag } -> ok
+    { underlying: Safe _ } -> openCell i
+    { underlying: Mine } -> lose
   checkWin
 
 checkWin :: MinesweeperM Unit
@@ -133,22 +130,16 @@ toggleFlagAt :: CellIndex -> MinesweeperM Unit
 toggleFlagAt i = modify_ i toggleFlag
 
 chordAt :: CellIndex -> MinesweeperM Unit
-chordAt i = do
-  cell <- get i
-  case cell of
-    { player: Flag } -> ok
-    { player: Closed } -> ok
-    -- if it's safe, try to chord there
-    { player: Open, underlying: Safe nearby } -> do
-      neighbors <- getNeighbors i
-      numNearbyFlags <- length <$> filterA (\j -> isFlag <$> get j) neighbors
-      if numNearbyFlags == nearby then
-        -- do the chord by revealing each closed neighbor
-        do
-          nearbyClosed <- filterA (\j -> isClosed <$> get j) neighbors
-          revealWithZeroProp nearbyClosed
-      else
-        -- if the number of nearby flags is not equal to the number of nearby mines, do nothing
-        ok
-    -- this should be impossible. TODO: is our model off?
-    { player: Open, underlying: Mine } -> ok
+chordAt i = get i >>= case _ of
+  { player: Flag } -> ok
+  { player: Closed } -> ok
+  -- if it's safe, try to chord there
+  { player: Open, underlying: Safe nearby } -> do
+    neighbors <- getNeighbors i
+    numNearbyFlags <- length <$> filterA (\j -> isFlag <$> get j) neighbors
+    when (numNearbyFlags == nearby) do
+      -- do the chord by revealing each closed neighbor
+      nearbyClosed <- filterA (\j -> isClosed <$> get j) neighbors
+      revealWithZeroProp nearbyClosed
+  -- this should be impossible. TODO: is our model off?
+  { player: Open, underlying: Mine } -> ok
