@@ -2,13 +2,8 @@ module App (appComponent) where
 
 import Prelude
 
-import Control.Monad.Except (runExceptT)
-import Control.Monad.Free (foldFree)
 import Control.Monad.ST.Class (liftST)
-import Control.Monad.ST.Ref as STRef
 import Data.Array (mapWithIndex)
-import Data.Array.ST as STArray
-import Data.Either (Either(..))
 import Data.Maybe (Maybe(..), fromMaybe)
 import Data.Tuple.Nested ((/\))
 import Effect.Aff.Class (class MonadAff)
@@ -19,7 +14,7 @@ import Halogen.HTML.Events as HE
 import Halogen.HTML.Properties as HP
 import Halogen.Hooks (HookM, StateId)
 import Halogen.Hooks as Hooks
-import Minesweeper.Eval (runMinesweeperF)
+import Minesweeper.Eval (MinesweeperResult(..), runMinesweeperM)
 import Minesweeper.Model (CellIndex, Field, GameOverKind(..), PlayerState(..), makeRandomField)
 import Minesweeper.Monad (chordAt, revealAt, toggleFlagAt)
 import OnContextMenu (onContextMenu)
@@ -111,17 +106,13 @@ appComponent =
           ChordAt i -> chordAt i
           FlagAt i -> toggleFlagAt i
 
-      cells <- liftEffect $ liftST $ STArray.unsafeThaw field.cells
-      remainingSafe <- liftEffect $ liftST $ STRef.new field.remainingSafe
-      result <- liftEffect $ liftST $ runExceptT $ foldFree (runMinesweeperF (field { cells = cells, remainingSafe = remainingSafe })) gameAction
-      newCells <- liftEffect $ liftST $ STArray.unsafeFreeze cells
-      newRemainingSafe <- liftEffect $ liftST $ STRef.read remainingSafe
+      result <- liftEffect $ liftST $ runMinesweeperM field gameAction
 
       case result of
-        Left kind -> do
+        GameOver kind -> do
           pauseTimer
           Hooks.put gameStateId (Done kind)
-        Right _ -> Hooks.put fieldId (Just field { cells = newCells, remainingSafe = newRemainingSafe })
+        Ok newField -> Hooks.put fieldId (Just newField)
 
 fieldComponent :: forall query m. MonadEffect m => H.Component query Field PlayerAction m
 fieldComponent =

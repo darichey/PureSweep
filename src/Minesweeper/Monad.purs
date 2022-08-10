@@ -1,9 +1,9 @@
 module Minesweeper.Monad
   ( MinesweeperF(..)
-  , MinesweeperM
+  , MinesweeperM(..)
   , chordAt
-  , toggleFlagAt
   , revealAt
+  , toggleFlagAt
   ) where
 
 import Prelude
@@ -19,38 +19,44 @@ import Minesweeper.Model as Model
 
 data MinesweeperF a
   = ModifyCell CellIndex (Cell -> Cell) (Cell -> a)
-  | GameOver GameOverKind
+  | EndGame GameOverKind
   | GetRemainingSafe (HashSet CellIndex -> a)
   | GetMineIndices (HashSet CellIndex -> a)
   | GetDims (Dims -> a)
 
 derive instance Functor MinesweeperF
 
-type MinesweeperM = Free MinesweeperF
+newtype MinesweeperM a = MinesweeperM (Free MinesweeperF a)
+
+derive newtype instance Functor MinesweeperM
+derive newtype instance Apply MinesweeperM
+derive newtype instance Applicative MinesweeperM
+derive newtype instance Bind MinesweeperM
+derive newtype instance Monad MinesweeperM
 
 get :: CellIndex -> MinesweeperM Cell
-get i = liftF (ModifyCell i identity identity)
+get i = MinesweeperM $ liftF $ ModifyCell i identity identity
 
 modify_ :: CellIndex -> (Cell -> Cell) -> MinesweeperM Unit
-modify_ i f = void $ liftF (ModifyCell i f identity)
+modify_ i f = MinesweeperM $ void $ liftF (ModifyCell i f identity)
 
 lose :: MinesweeperM Unit
-lose = liftF (GameOver Lose)
+lose = MinesweeperM $ liftF $ EndGame Lose
 
 win :: MinesweeperM Unit
-win = liftF (GameOver Win)
+win = MinesweeperM $ liftF $ EndGame Win
 
 getRemainingSafe :: MinesweeperM (HashSet CellIndex)
-getRemainingSafe = liftF (GetRemainingSafe identity)
+getRemainingSafe = MinesweeperM $ liftF $ GetRemainingSafe identity
 
 getMineIndices :: MinesweeperM (HashSet CellIndex)
-getMineIndices = liftF (GetMineIndices identity)
+getMineIndices = MinesweeperM $ liftF $ GetMineIndices identity
 
 getDims :: MinesweeperM Dims
-getDims = liftF (GetDims identity)
+getDims = MinesweeperM $ liftF $ GetDims identity
 
 ok :: MinesweeperM Unit
-ok = pure unit
+ok = MinesweeperM $ pure unit
 
 openCell :: CellIndex -> MinesweeperM Unit
 openCell i = modify_ i makeOpen
