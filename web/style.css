@@ -1,3 +1,11 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+body {
+    font-family: monospace;
+    font-size: x-large;
+    padding-top: 1vh;
+    padding-left: 0.25rem;
+    padding-right: 0.25rem;
+}

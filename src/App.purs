@@ -34,9 +34,9 @@ data GameState = New | Playing | Done GameOverKind
 appComponent :: forall query input output m. MonadAff m => H.Component query input output m
 appComponent =
   Hooks.component \_ _ -> Hooks.do
-    width /\ widthId <- Hooks.useState 10
-    height /\ heightId <- Hooks.useState 10
-    mines /\ minesId <- Hooks.useState 10
+    width /\ widthId <- Hooks.useState 30
+    height /\ heightId <- Hooks.useState 16
+    mines /\ minesId <- Hooks.useState 99
     field /\ fieldId <- Hooks.useState Nothing
     { time, start: startTimer, pause: pauseTimer, reset: resetTimer } <- useTimer
     gameState /\ gameStateId <- Hooks.useState New
@@ -55,36 +55,54 @@ appComponent =
       pure Nothing -- no cleanup hook
 
     Hooks.pure
-      $ HH.div_
-          [ HH.p_ [ HH.text "Options" ]
-          , HH.slot _optionDial 0 optionDialComponent
-              { name: "Width", num: width, min: Just 1, max: Nothing }
-              ( \w -> do
-                  Hooks.modify_ minesId (min (w * height))
-                  Hooks.put widthId w
-              )
-          , HH.slot _optionDial 1 optionDialComponent
-              { name: "Height", num: height, min: Just 1, max: Nothing }
-              ( \h -> do
-                  Hooks.modify_ minesId (min (width * h))
-                  Hooks.put heightId h
-              )
-          , HH.slot _optionDial 2 optionDialComponent
-              { name: "Mines", num: mines, min: Just 0, max: Just (width * height) }
-              (Hooks.put minesId)
-          , HH.button [ HE.onClick \_ -> resetGame ] [ HH.text "New Game" ]
-          , HH.div_ [ HH.text $ show time ]
-          , HH.p_ [ HH.text "Game" ]
-          , case field of
-              Nothing -> HH.div_ [ HH.text "loading" ]
-              Just field' -> HH.div_ [ HH.slot _field 3 fieldComponent field' (handleFieldUpdate field' fieldId gameState gameStateId startTimer pauseTimer) ]
-          , HH.div_
-              [ HH.text $
-                  case gameState of
-                    New -> "New"
-                    Playing -> "Playing"
-                    Done Win -> "Win"
-                    Done Lose -> "Lose"
+      $ HH.div
+          [ twclass "flex flex-col gap-5" ]
+          [ HH.div_
+              [ HH.div
+                  [ twclass "text-4xl text-center" ]
+                  [ HH.a [ HP.href "https://darichey.com/minesweeper" ] [ HH.text "PureSweep" ] ]
+              , HH.div
+                  [ twclass "text-xl text-gray-500 text-center" ]
+                  [ HH.text "A Minesweeper clone written in "
+                  , HH.a [ twclass "underline decoration-dotted", HP.href "https://www.purescript.org/" ] [ HH.text "PureScript" ]
+                  ]
+              ]
+          , HH.div
+              [ twclass "flex flex-row gap-1" ]
+              [ HH.div
+                  [ twclass "flex flex-col gap-1" ]
+                  [ HH.div
+                      [ twclass "inline-grid grid-cols-5 grid-rows-3 gap-1" ]
+                      [ HH.slot _optionDial 0 optionDialComponent
+                          { name: "Width", num: width, min: Just 1, max: Nothing }
+                          ( \w -> do
+                              Hooks.modify_ minesId (min (w * height))
+                              Hooks.put widthId w
+                          )
+                      , HH.slot _optionDial 1 optionDialComponent
+                          { name: "Height", num: height, min: Just 1, max: Nothing }
+                          ( \h -> do
+                              Hooks.modify_ minesId (min (width * h))
+                              Hooks.put heightId h
+                          )
+                      , HH.slot _optionDial 2 optionDialComponent
+                          { name: "Mines", num: mines, min: Just 0, max: Just (width * height) }
+                          (Hooks.put minesId)
+                      ]
+                  , HH.button
+                      [ twclass "p-1 border-2 border-black rounded"
+                      , HE.onClick \_ -> resetGame
+                      ]
+                      [ HH.text "New Game" ]
+                  , HH.div_
+                      [ HH.text $ "Time: " <> show time ]
+                  ]
+              , HH.div
+                  [ twclass "flex-1 flex justify-center" ]
+                  [ case field of
+                      Nothing -> HH.text "Loading game..."
+                      Just field' -> HH.slot _field 3 fieldComponent field' (handleFieldUpdate field' fieldId gameState gameStateId startTimer pauseTimer)
+                  ]
               ]
           ]
   where
@@ -118,41 +136,35 @@ fieldComponent :: forall query m. MonadEffect m => H.Component query Field Playe
 fieldComponent =
   Hooks.component \{ outputToken } field -> Hooks.do
     Hooks.pure
-      $ HH.div_
-          [ HH.div
-              [ twclass "inline-grid gap-1 select-none"
-              , HP.style $ "grid-template-columns: repeat(" <> show field.dims.width <> ", minmax(0, 1fr))"
-              , HP.style $ "grid-template-rows: repeat(" <> show field.dims.height <> ", minmax(0, 1fr))"
-              , HP.draggable false
-              ]
-              $ mapWithIndex
-                  ( \i cell ->
-                      HH.div
-                        [ twclass "flex text-center justify-center content-center select-none"
-                        , HP.draggable false
-                        , onContextMenu \event -> liftEffect $ preventDefault event
-                        , HE.onMouseDown \event -> case button event of
-                            0 -> Hooks.raise outputToken (RevealAt i)
-                            1 -> Hooks.raise outputToken (ChordAt i)
-                            2 -> Hooks.raise outputToken (FlagAt i)
-                            _ -> pure unit
-                        ]
-                        [ HH.img
-                            [ twclass "select-none"
-                            , HP.src
-                                $ case cell.player of
-                                    Open -> "img/" <> show (cell.underlying) <> ".png"
-                                    Closed -> "img/closed.png"
-                                    Flag -> "img/flag.png"
-                            , HP.width 64
-                            , HP.draggable false
-                            ]
-                        ]
-                  )
-                  field.cells
-          , HH.div_
-              []
+      $ HH.div
+          [ twclass "inline-grid select-none"
+          , HP.style $ "grid-template-columns: repeat(" <> show field.dims.width <> ", minmax(0, 1fr))"
+          , HP.draggable false
           ]
+      $ mapWithIndex
+          ( \i cell ->
+              HH.div
+                [ HP.draggable false
+                , onContextMenu \event -> liftEffect $ preventDefault event
+                , HE.onMouseDown \event -> case button event of
+                    0 -> Hooks.raise outputToken (RevealAt i)
+                    1 -> Hooks.raise outputToken (ChordAt i)
+                    2 -> Hooks.raise outputToken (FlagAt i)
+                    _ -> pure unit
+                ]
+                [ HH.img
+                    [ twclass "select-none"
+                    , HP.src
+                        $ case cell.player of
+                            Open -> "img/" <> show (cell.underlying) <> ".png"
+                            Closed -> "img/closed.png"
+                            Flag -> "img/flag.png"
+                    , HP.width 64
+                    , HP.draggable false
+                    ]
+                ]
+          )
+          field.cells
 
 type OptionDialInput = { name :: String, num :: Int, min :: Maybe Int, max :: Maybe Int }
 
@@ -160,10 +172,24 @@ optionDialComponent :: forall query m. H.Component query OptionDialInput Int m
 optionDialComponent =
   Hooks.component \{ outputToken } { name, num, min, max } -> Hooks.do
     Hooks.pure
-      $ HH.div_
-          [ HH.button [ HE.onClick \_ -> Hooks.raise outputToken (clampMaybe min max (num + 1)) ] [ HH.text "+" ]
-          , HH.button [ HE.onClick \_ -> Hooks.raise outputToken (clampMaybe min max (num - 1)) ] [ HH.text "-" ]
-          , HH.text $ name <> ": " <> show num
+      $ HH.div
+          [ twclass "contents" ]
+          [ HH.button
+              [ twclass "col-span-1 p-1 border-2 border-black rounded text-red-500"
+              , HE.onClick \_ -> Hooks.raise outputToken (clampMaybe min max (num - 1))
+              ]
+              [ HH.text "-" ]
+          , HH.div
+              [ twclass "col-span-2 p-1" ]
+              [ HH.text $ name <> ":" ]
+          , HH.div
+              [ twclass "col-span-1 p-1 text-right" ]
+              [ HH.text $ show num ]
+          , HH.button
+              [ twclass "col-span-1 p-1 border-2 border-black rounded text-green-500"
+              , HE.onClick \_ -> Hooks.raise outputToken (clampMaybe min max (num + 1))
+              ]
+              [ HH.text "+" ]
           ]
 
 clampMaybe :: Maybe Int -> Maybe Int -> Int -> Int
