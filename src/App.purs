@@ -98,7 +98,13 @@ appComponent =
                       [ HH.text $ "Time: " <> show time ]
                   ]
               , HH.div
-                  [ twclass "flex-1 flex justify-center" ]
+                  [ twclass "flex-1 flex justify-center"
+                  , HP.style $ "opacity: " <>
+                      ( case gameState of
+                          Done Lose -> "0.5"
+                          _ -> "1"
+                      )
+                  ]
                   [ case field of
                       Nothing -> HH.text "Loading game..."
                       Just field' -> HH.slot _field 3 fieldComponent field' (handleFieldUpdate field' fieldId gameState gameStateId startTimer pauseTimer)
