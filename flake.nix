@@ -20,7 +20,6 @@
             easy-ps.spago
             easy-ps.purs-tidy
             pkgs.nodejs
-            pkgs.esbuild
           ];
         };
     };

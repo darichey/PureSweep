@@ -8,6 +8,7 @@
         "serve": "cp -r web dist && npm run build:esbuild -- --servedir=dist"
     },
     "devDependencies": {
+        "esbuild": "^0.15.5",
         "tailwindcss": "^3.1.7"
     },
     "dependencies": {
