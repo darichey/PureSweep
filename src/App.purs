@@ -61,7 +61,7 @@ appComponent =
           [ HH.div_
               [ HH.div
                   [ twclass "text-4xl text-center" ]
-                  [ HH.a [ HP.href "https://darichey.com/minesweeper" ] [ HH.text "PureSweep" ] ]
+                  [ HH.a [ HP.href "https://darichey.github.io/PureSweep/" ] [ HH.text "PureSweep" ] ]
               , HH.div
                   [ twclass "text-xl text-gray-500 text-center" ]
                   [ HH.text "A Minesweeper clone written in "
