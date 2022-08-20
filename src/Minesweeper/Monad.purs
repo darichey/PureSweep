@@ -111,7 +111,9 @@ revealAll indices = do
     { player: Open } -> ok
     { player: Flag } -> ok
     { underlying: Safe _ } -> openCell i
-    { underlying: Mine } -> lose
+    { underlying: Mine } -> do
+      openCell i
+      lose
   checkWin
 
 checkWin :: MinesweeperM Unit
