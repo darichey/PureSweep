@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      # SETUP
+      - uses: actions/checkout@v2
+
+      - uses: thomashoneyman/setup-purescript@main
+        with:
+          purescript: "0.15.0"
+          spago: "0.20.9"
+          purs-tidy: "0.8.0"
+
+      - name: Cache PureScript dependencies
+        uses: actions/cache@v2
+        with:
+          key: ${{ runner.os }}-spago-${{ hashFiles('**/*.dhall') }}
+          path: |
+            .spago
+            output
+      - uses: actions/setup-node@v2
+        with:
+          node-version: "16.x"
+          cache: "npm"
+
+      - name: Install NPM dependencies
+        run: npm ci
+
+      - name: Build source
+        run: spago build
+
+      - name: Run tests
+        run: spago test --no-install
+
+      - name: Check formatting
+        run: purs-tidy check src test
+
+      - name: Run bundle
+        run: npm run bundle
+
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./dist
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
