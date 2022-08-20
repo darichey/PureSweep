@@ -15,7 +15,7 @@ import Halogen.HTML.Properties as HP
 import Halogen.Hooks (HookM, StateId)
 import Halogen.Hooks as Hooks
 import Minesweeper.Eval (MinesweeperResult(..), runMinesweeperM)
-import Minesweeper.Model (CellIndex, Field, GameOverKind(..), PlayerState(..), makeRandomField)
+import Minesweeper.Model (CellIndex, Field, GameOverKind(..), PlayerState(..), UnderlyingCellState(..), makeRandomField)
 import Minesweeper.Monad (chordAt, revealAt, toggleFlagAt)
 import OnContextMenu (onContextMenu)
 import Type.Proxy (Proxy(..))
@@ -107,7 +107,7 @@ appComponent =
                   ]
                   [ case field of
                       Nothing -> HH.text "Loading game..."
-                      Just field' -> HH.slot _field 3 fieldComponent field' (handleFieldUpdate field' fieldId gameState gameStateId startTimer pauseTimer)
+                      Just field' -> HH.slot _field 3 fieldComponent { field: field', gameState } (handleFieldUpdate field' fieldId gameState gameStateId startTimer pauseTimer)
                   ]
               ]
           ]
@@ -138,9 +138,9 @@ appComponent =
           Hooks.put gameStateId (Done kind)
         Ok newField -> Hooks.put fieldId (Just newField)
 
-fieldComponent :: forall query m. MonadEffect m => H.Component query Field PlayerAction m
+fieldComponent :: forall query m. MonadEffect m => H.Component query { field :: Field, gameState :: GameState } PlayerAction m
 fieldComponent =
-  Hooks.component \{ outputToken } field -> Hooks.do
+  Hooks.component \{ outputToken } { field, gameState } -> Hooks.do
     Hooks.pure
       $ HH.div
           [ twclass "inline-grid select-none"
@@ -160,11 +160,20 @@ fieldComponent =
                 ]
                 [ HH.img
                     [ twclass "select-none"
-                    , HP.src
-                        $ case cell.player of
-                            Open -> "img/" <> show (cell.underlying) <> ".png"
-                            Closed -> "img/closed.png"
-                            Flag -> "img/flag.png"
+                    , HP.src $ "img/" <>
+                        case cell of
+                          { underlying: Mine, player: Open } -> "mine_explode.png"
+                          { underlying: Mine, player: Closed } ->
+                            case gameState of
+                              Done _ -> "mine.png"
+                              _ -> "closed.png"
+                          { underlying: Mine, player: Flag } -> "flag.png"
+                          { underlying: Safe n, player: Open } -> show n <> ".png"
+                          { underlying: Safe _, player: Closed } -> "closed.png"
+                          { underlying: Safe _, player: Flag } ->
+                            case gameState of
+                              Done _ -> "flag_wrong.png"
+                              _ -> "flag.png"
                     , HP.width 64
                     , HP.draggable false
                     ]
