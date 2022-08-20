@@ -33,7 +33,10 @@ useTimer = Hooks.wrap hook
   hook :: Hook m (UseTimer' m) (Timer m)
   hook = Hooks.do
     time /\ timeId <- Hooks.useState 0
-    { listener, fiber } /\ ref <- Hooks.useRef { listener: Nothing, fiber: Nothing }
+    -- We don't care about the first value of the tuple, because we only use the ref values inside HookM.
+    -- That means that we have to read from the ref manaully:
+    -- > any effectful computations in HookM should read the value of the reference to guarantee an up-to-date value.
+    _ /\ ref <- Hooks.useRef { listener: Nothing, fiber: Nothing }
 
     _ <- Hooks.useLifecycleEffect do
       { emitter, listener: listener' } <- H.liftEffect HS.create
@@ -42,25 +45,29 @@ useTimer = Hooks.wrap hook
       pure $ Just $ Hooks.unsubscribe subscription
 
     let
-      start = case fiber of
-        Just _ -> pure unit -- already started, no-op
-        Nothing -> case listener of
-          Nothing -> pure unit -- this should be impossible
-          Just listener' -> do
-            fiber' <- H.liftAff $ Aff.forkAff $ forever do
-              Aff.delay $ Milliseconds 1000.0
-              H.liftEffect $ HS.notify listener' do
-                Hooks.modify_ timeId (_ + 1)
-                pure unit
+      start = do
+        { fiber: curFiber, listener: curListener } <- H.liftEffect $ Ref.read ref
+        case curFiber of
+          Just _ -> pure unit -- already started, no-op
+          Nothing -> case curListener of
+            Nothing -> pure unit -- this should be impossible
+            Just listener' -> do
+              fiber' <- H.liftAff $ Aff.forkAff $ forever do
+                Aff.delay $ Milliseconds 1000.0
+                H.liftEffect $ HS.notify listener' do
+                  Hooks.modify_ timeId (_ + 1)
+                  pure unit
 
-            H.liftEffect $ Ref.modify_ (\state -> state { fiber = Just fiber' }) ref
+              H.liftEffect $ Ref.modify_ (\state -> state { fiber = Just fiber' }) ref
 
       reset = Hooks.put timeId 0
 
-      pause = case fiber of
-        Nothing -> pure unit -- not running, no-op
-        Just fiber' -> do
-          _ <- H.liftAff $ Aff.killFiber (error "Timer Pause") fiber'
-          H.liftEffect $ Ref.modify_ (\state -> state { fiber = Nothing }) ref
+      pause = do
+        { fiber: curFiber } <- H.liftEffect $ Ref.read ref
+        case curFiber of
+          Nothing -> pure unit -- not running, no-op
+          Just fiber' -> do
+            _ <- H.liftAff $ Aff.killFiber (error "Timer Pause") fiber'
+            H.liftEffect $ Ref.modify_ (\state -> state { fiber = Nothing }) ref
 
     Hooks.pure { time, start, pause, reset }
