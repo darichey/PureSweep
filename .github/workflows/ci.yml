@@ -37,11 +37,8 @@ jobs:
       - name: Build source
         run: spago build
 
-      - name: Run tests
-        run: spago test --no-install
-
       - name: Check formatting
-        run: purs-tidy check src test
+        run: purs-tidy check src
 
       - name: Run bundle
         run: npm run bundle
