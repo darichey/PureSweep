@@ -5,7 +5,7 @@ import Prelude
 import Confetti (doWinConfetti)
 import Control.Monad.ST.Class (liftST)
 import Data.Array (mapWithIndex)
-import Data.Maybe (Maybe(..), fromMaybe)
+import Data.Maybe (Maybe(..), fromMaybe, maybe)
 import Data.Tuple.Nested ((/\))
 import Effect.Aff.Class (class MonadAff)
 import Effect.Class (class MonadEffect, liftEffect)
@@ -97,6 +97,8 @@ appComponent =
                       [ HH.text "New Game" ]
                   , HH.div_
                       [ HH.text $ "Time: " <> show time ]
+                  , HH.div_
+                      [ HH.text $ "Minecount: " <> show (mines - (maybe 0 identity (map _.flags field))) ]
                   ]
               , HH.div
                   [ twclass "flex-1 flex justify-center"
