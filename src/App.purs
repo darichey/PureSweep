@@ -2,6 +2,7 @@ module App (appComponent) where
 
 import Prelude
 
+import Confetti (doWinConfetti)
 import Control.Monad.ST.Class (liftST)
 import Data.Array (mapWithIndex)
 import Data.Maybe (Maybe(..), fromMaybe)
@@ -135,6 +136,9 @@ appComponent =
       case result of
         GameOver kind -> do
           pauseTimer
+          case kind of
+            Win -> liftEffect doWinConfetti
+            Lose -> pure unit
           Hooks.put gameStateId (Done kind)
         Ok newField -> Hooks.put fieldId (Just newField)
 
