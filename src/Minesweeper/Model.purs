@@ -31,7 +31,7 @@ import Data.HashSet (HashSet)
 import Data.HashSet as HashSet
 import Data.Maybe (Maybe(..))
 import Effect (Effect)
-import Sample (sample)
+import Util.Sample (sample)
 
 data GameOverKind = Win | Lose
 

@@ -1,4 +1,4 @@
-module OnContextMenu
+module Util.OnContextMenu
   ( contextmenu
   , onContextMenu
   ) where

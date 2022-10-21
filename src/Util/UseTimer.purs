@@ -1,4 +1,4 @@
-module UseTimer
+module Util.UseTimer
   ( UseTimer
   , useTimer
   ) where

@@ -1,4 +1,4 @@
-module Sample (sample) where
+module Util.Sample (sample) where
 
 import Prelude
 import Control.Monad.Rec.Loops (unfoldrM, untilJust)
