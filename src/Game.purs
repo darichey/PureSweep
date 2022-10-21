@@ -1,4 +1,4 @@
-module App (appComponent) where
+module Game (gameComponent) where
 
 import Prelude
 
@@ -32,8 +32,8 @@ _optionDial = Proxy :: Proxy "optionDial"
 data PlayerAction = RevealAt CellIndex | ChordAt CellIndex | FlagAt CellIndex
 data GameState = New | Playing | Done GameOverKind
 
-appComponent :: forall query input output m. MonadAff m => H.Component query input output m
-appComponent =
+gameComponent :: forall query input output m. MonadAff m => H.Component query input output m
+gameComponent =
   Hooks.component \_ _ -> Hooks.do
     width /\ widthId <- Hooks.useState 30
     height /\ heightId <- Hooks.useState 16

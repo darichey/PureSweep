@@ -18,6 +18,7 @@
   , "prelude"
   , "random"
   , "refs"
+  , "routing"
   , "st"
   , "tailrec"
   , "transformers"
